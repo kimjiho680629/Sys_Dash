@@ -1,19 +1,19 @@
 """
-상위 리소스 점유 프로세스 TOP 5 HUD 테이블 위젯
+화이트 PCB AIDA64 스타일 상위 프로세스 HUD 테이블 위젯
 """
 
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtGui import QPainter, QPen, QColor, QBrush
 from PyQt6.QtCore import Qt, QRectF
-from theme import HUDColor, get_font_mono
+from theme import WhitePCBColor, get_font_bold, get_font_regular
 
 
 class TopProcessTable(QWidget):
-    """TOP 5 프로세스 사이버펑크 HUD 리스트"""
+    """화이트 PCB 스타일 상위 5개 프로세스 테이블"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.procs = []
-        self.setFixedHeight(120)
+        self.setFixedHeight(105)
 
     def set_processes(self, procs):
         self.procs = procs[:5]
@@ -26,51 +26,54 @@ class TopProcessTable(QWidget):
         w = float(self.width())
         h = float(self.height())
 
-        row_h = 19.0
+        row_h = 17.0
         header_y = 0.0
 
         # 헤더 배경
-        painter.setBrush(QBrush(HUDColor.BG_CARD_LIGHT))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRect(QRectF(0, header_y, w, row_h))
+        painter.setBrush(QBrush(WhitePCBColor.BAR_BG))
+        painter.setPen(QPen(WhitePCBColor.BORDER_MAIN, 1.0))
+        painter.drawRect(QRectF(1, header_y, w - 2, row_h))
 
         # 헤더 텍스트
-        painter.setFont(get_font_mono(8, bold=True))
-        painter.setPen(QPen(HUDColor.CYAN_DIM))
-        painter.drawText(QRectF(8, header_y, 45, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "PID")
-        painter.drawText(QRectF(55, header_y, w - 170, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "NAME")
-        painter.drawText(QRectF(w - 110, header_y, 50, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, "CPU%")
-        painter.drawText(QRectF(w - 55, header_y, 45, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, "MEM%")
+        painter.setFont(get_font_bold(8))
+        painter.setPen(QPen(WhitePCBColor.TEXT_MAIN))
+        painter.drawText(QRectF(6, header_y, 42, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "PID")
+        painter.drawText(QRectF(52, header_y, w - 160, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "NAME")
+        painter.drawText(QRectF(w - 105, header_y, 48, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, "CPU%")
+        painter.drawText(QRectF(w - 52, header_y, 45, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, "MEM%")
 
         # 데이터 행
-        painter.setFont(get_font_mono(8))
+        painter.setFont(get_font_regular(8))
         for i, proc in enumerate(self.procs):
             ry = header_y + row_h + (i * row_h)
-            # 행 번갈아 배경 틴트
+            if ry + row_h > h:
+                break
+
+            # 교차 행 배경
             if i % 2 == 1:
-                painter.setBrush(QBrush(HUDColor.BG_CARD))
+                painter.setBrush(QBrush(QColor(245, 246, 249)))
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawRect(QRectF(0, ry, w, row_h))
+                painter.drawRect(QRectF(1, ry, w - 2, row_h))
 
             # PID
-            painter.setPen(QPen(HUDColor.TEXT_MUTED))
-            painter.drawText(QRectF(8, ry, 45, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, str(proc.get('pid', '')))
+            painter.setPen(QPen(WhitePCBColor.TEXT_MUTED))
+            painter.drawText(QRectF(6, ry, 42, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, str(proc.get('pid', '')))
 
             # Name
-            painter.setPen(QPen(HUDColor.TEXT_TITLE))
-            painter.drawText(QRectF(55, ry, w - 170, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, str(proc.get('name', '')))
+            painter.setPen(QPen(WhitePCBColor.TEXT_MAIN))
+            painter.drawText(QRectF(52, ry, w - 160, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, str(proc.get('name', '')))
 
             # CPU%
             cpu_val = proc.get('cpu_percent', 0.0)
             if cpu_val > 50:
-                painter.setPen(QPen(HUDColor.RED))
-            elif cpu_val > 10:
-                painter.setPen(QPen(HUDColor.AMBER))
+                painter.setPen(QPen(QColor(220, 20, 60)))
+            elif cpu_val > 15:
+                painter.setPen(QPen(QColor(180, 100, 0)))
             else:
-                painter.setPen(QPen(HUDColor.CYAN))
-            painter.drawText(QRectF(w - 110, ry, 50, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, f"{cpu_val:.1f}%")
+                painter.setPen(QPen(WhitePCBColor.TEXT_MAIN))
+            painter.drawText(QRectF(w - 105, ry, 48, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, f"{cpu_val:.1f}%")
 
             # MEM%
             mem_val = proc.get('mem_percent', 0.0)
-            painter.setPen(QPen(HUDColor.TEXT_BODY))
-            painter.drawText(QRectF(w - 55, ry, 45, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, f"{mem_val:.1f}%")
+            painter.setPen(QPen(WhitePCBColor.TEXT_SUB))
+            painter.drawText(QRectF(w - 52, ry, 45, row_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, f"{mem_val:.1f}%")
