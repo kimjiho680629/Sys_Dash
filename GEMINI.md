@@ -99,3 +99,35 @@ windowrulev2 = monitor HDMI-A-1, class:^(sys-dash)$
 windowrulev2 = workspace 9, class:^(sys-dash)$
 windowrulev2 = fullscreen, class:^(sys-dash)$
 ```
+
+---
+
+## 7. 간편 커스터마이징 가이드 (`config.py`)
+
+코드 수정 없이 `config.py` 파일의 값만 변경하여 대시보드의 동작과 비주얼을 손쉽게 변경할 수 있습니다:
+
+```python
+class Config:
+    TARGET_MONITOR = "HDMI-A-1"       # 타겟 모니터 이름
+    POLL_INTERVAL_MS = 800            # 센서 데이터 수집 주기 (800ms)
+    TEMP_WARNING_C = 68.0             # 주의 온도 (°C, 골드)
+    TEMP_CRITICAL_C = 80.0            # 과열 경고 온도 (°C, 레드 펄스)
+    GPU_POWER_LIMIT_W = 300.0         # RTX 5070 Ti TGP 파워 캡
+    SHOW_HEXAGON_MESH = True          # 배경 헥사곤 메쉬 표시 여부
+```
+
+---
+
+## 8. 다음에 이어서 작업 가능한 추천 확장 로드맵 (Next Steps)
+
+다음에 작업을 이어갈 때 아래 기능들을 즉시 추가할 수 있도록 모듈화되어 있습니다:
+
+1. **MangoHud / 게임 실시간 FPS 연동**:
+   - 게임 구동 시 실시간 프레임레이트(FPS) 및 프레임타임(ms)을 중앙 헤더나 서브 다이얼에 표시.
+2. **다채로운 테마 프리셋 원클릭 전환 (`T` 키)**:
+   - 사이버펑크 네온 시안 ↔ 페라리 레이싱 레드 ↔ 람보르기니 골드 앰버 ↔ 에반게리온 퍼플 테마 실시간 토글.
+3. **과열 시 사이버네틱 사운드 경고음**:
+   - 85°C 이상 극한 과열 감지 시 사운드 알림 비프(Alsa / PulseAudio 연동).
+4. **Hyprland 시스템 부팅 시 자동 실행 (Autostart)**:
+   - `exec-once = /home/kjh/Projects/Gemini_Job/Sys_Dash/run_dashboard.sh` 등록.
+
