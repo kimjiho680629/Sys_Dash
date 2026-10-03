@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Sys Dash HUD
+GenericName=System Telemetry Dashboard
+Comment=Cyberpunk Sci-Fi Hardware Dashboard for HDMI-A-1
+Exec=/home/kjh/Projects/Gemini_Job/Sys_Dash/run_dashboard.sh
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;HardwareSettings;
+StartupWMClass=sys-dash
