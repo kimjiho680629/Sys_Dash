@@ -1,18 +1,22 @@
 """
-Sys_Dash: AIDA64 화이트 PCB 스타일 하드웨어 텔레메트리 대시보드
+Sys_Dash: AIDA64 화이트 & 다크 PCB 스타일 하드웨어 텔레메트리 대시보드
 AMD Ryzen 7 9800X3D + NVIDIA GeForce RTX 5070 Ti (GB203 16GB)
 HDMI-A-1 (ARZOPA 2K 144Hz) 전용 네이티브 센서 패널
+살아 숨쉬는 PCB 회로 전류 펄스 애니메이션 & 실시간 다크/화이트 모드 토글
 """
 
 import sys
 import os
+import math
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPainter, QKeyEvent
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QPainter, QKeyEvent, QColor
 
-from theme import WhitePCBColor, draw_pcb_background, get_font_bold
+from theme import (
+    WhitePCBColor, ThemeManager, draw_pcb_background, get_font_bold, get_font_regular
+)
 from config import Config
 from monitor_collector import SystemMonitorCollector
 from widgets.pcb_cpu_section import PcbCpuSection
@@ -22,31 +26,41 @@ from widgets.pcb_gpu_section import PcbGpuSection
 
 class WhitePCBDashboard(QMainWindow):
     """
-    화이트 PCB 회로 기판 AIDA64 센서 패널 대시보드
+    화이트 & 다크 매트 PCB 회로 기판 AIDA64 센서 패널 대시보드
     """
     def __init__(self, target_monitor=None):
         super().__init__()
         self.target_monitor_name = target_monitor or Config.TARGET_MONITOR
         self.collector = None
 
-        self.setWindowTitle("AIDA64 SENSOR PANEL // WHITE PCB CIRCUIT HUD")
+        # 회로 전류 펄스 및 시스템 맥박 애니메이션 변수
+        self.pulse_offset = 0.0
+        self.pulse_dot_phase = 0.0
+
+        # 초기 테마 설정 적용
+        initial_theme = getattr(Config, "DEFAULT_THEME", "dark").lower()
+        ThemeManager.set_theme(initial_theme)
 
         self._init_ui()
         self._setup_monitor()
+        self._start_animations()
         self._start_collector()
 
+        ThemeManager.register_listener(self.apply_theme)
+        self.apply_theme()
+
     def _init_ui(self):
-        # 중앙 위젯 (PCB 회로 기판 배경을 직접 페인팅)
-        central_widget = QWidget(self)
-        self.setCentralWidget(central_widget)
+        # 중앙 위젯 (PCB 회로 기판 배경과 전류 펄스를 직접 페인팅)
+        self.central_panel = QWidget(self)
+        self.setCentralWidget(self.central_panel)
 
         def custom_paint(event):
-            painter = QPainter(central_widget)
-            draw_pcb_background(painter, central_widget.rect())
+            painter = QPainter(self.central_panel)
+            draw_pcb_background(painter, self.central_panel.rect(), self.pulse_offset)
 
-        central_widget.paintEvent = custom_paint
+        self.central_panel.paintEvent = custom_paint
 
-        root_layout = QVBoxLayout(central_widget)
+        root_layout = QVBoxLayout(self.central_panel)
         root_layout.setContentsMargins(18, 16, 18, 14)
         root_layout.setSpacing(12)
 
@@ -72,19 +86,63 @@ class WhitePCBDashboard(QMainWindow):
         footer_layout = QHBoxLayout()
         footer_layout.setContentsMargins(6, 0, 6, 0)
 
-        left_status = QLabel("● SYSTEM NOMINAL  |  ARCH LINUX  |  HYPRLAND DESKTOP")
-        left_status.setFont(get_font_bold(8))
-        left_status.setStyleSheet(f"color: {WhitePCBColor.TEXT_MUTED.name()};")
-        footer_layout.addWidget(left_status)
+        # 시스템 맥박 점멸 인디케이터
+        self.left_status = QLabel()
+        self.left_status.setFont(get_font_regular(9))
+        footer_layout.addWidget(self.left_status)
 
         footer_layout.addStretch()
 
-        hotkey_info = QLabel("[F11] FULLSCREEN  |  [M] SWITCH MONITOR  |  [ESC / Q] EXIT")
-        hotkey_info.setFont(get_font_bold(8))
-        hotkey_info.setStyleSheet(f"color: {WhitePCBColor.TEXT_MUTED.name()};")
-        footer_layout.addWidget(hotkey_info)
+        # 단축키 안내 및 원클릭 테마 토글 라벨
+        self.hotkey_info = QLabel()
+        self.hotkey_info.setFont(get_font_regular(9))
+        self.hotkey_info.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.hotkey_info.mousePressEvent = lambda e: self.toggle_theme()
+        footer_layout.addWidget(self.hotkey_info)
 
         root_layout.addLayout(footer_layout)
+
+    def _start_animations(self):
+        # 1. PCB 전류 펄스 & 시스템 맥박 애니메이션 타이머 (30ms = 약 33 FPS)
+        self.anim_timer = QTimer(self)
+        self.anim_timer.timeout.connect(self._on_anim_tick)
+        self.anim_timer.start(30)
+
+    def _on_anim_tick(self):
+        # 회로 전류 펄스 오프셋 증가
+        self.pulse_offset = (self.pulse_offset + 0.005) % 1.0
+        self.central_panel.update()
+
+        # 하단 상태 표시줄의 살아 숨쉬는 맥박 펄스 (Heartbeat Dot)
+        self.pulse_dot_phase = (self.pulse_dot_phase + 0.08) % (math.pi * 2)
+        dot_pulse = (math.sin(self.pulse_dot_phase) + 1.0) / 2.0
+        
+        if ThemeManager.is_dark():
+            dot_c = QColor(0, int(190 + 65 * dot_pulse), int(210 + 45 * dot_pulse))
+        else:
+            dot_c = QColor(0, int(160 + 50 * dot_pulse), int(80 + 40 * dot_pulse))
+
+        self.left_status.setText(
+            f"<span style='color: {dot_c.name()}; font-weight: bold;'>●</span> "
+            f"<span style='color: {WhitePCBColor.TEXT_MUTED.name()};'>SYSTEM NOMINAL  |  ARCH LINUX  |  HYPRLAND DESKTOP</span>"
+        )
+
+    def apply_theme(self):
+        mode_str = ThemeManager.get_theme().upper()
+        self.setWindowTitle(f"AIDA64 SENSOR PANEL // {mode_str} PCB CIRCUIT HUD")
+
+        c_muted = WhitePCBColor.TEXT_MUTED.name()
+        c_main = WhitePCBColor.TEXT_MAIN.name()
+
+        self.hotkey_info.setStyleSheet(f"color: {c_muted};")
+        self.hotkey_info.setText(
+            f"[F11] FULLSCREEN  |  [M] MONITOR  |  <span style='color: {c_main}; font-weight: bold;'>[T] THEME: {mode_str}</span>  |  [ESC / Q] EXIT"
+        )
+
+        self.central_panel.update()
+
+    def toggle_theme(self):
+        ThemeManager.toggle_theme()
 
     def _setup_monitor(self):
         screens = QApplication.screens()
@@ -116,16 +174,18 @@ class WhitePCBDashboard(QMainWindow):
         mem = data['memory']
         disk = data['disk']
         net = data['network']
+        mobo = data.get('motherboard', {})
+        audio = data.get('audio', {})
         procs = data['processes']
 
-        # 1. CPU 섹션 업데이트
-        self.cpu_section.update_data(cpu)
+        # 1. 좌측: CPU 및 메인보드 섹션 업데이트
+        self.cpu_section.update_data(cpu, mobo)
 
-        # 2. 중앙 섹션 업데이트
-        self.center_section.update_data(mem, disk, net, cpu['fan_rpm'], gpu['fan_percent'])
+        # 2. 중앙: 메모리, SSD, PipeWire 오디오 VU 미터 및 쿨링 팬 섹션 업데이트
+        self.center_section.update_data(mem, disk, cpu['fan_rpm'], gpu['fan_percent'], audio)
 
-        # 3. GPU 섹션 업데이트
-        self.gpu_section.update_data(gpu, procs)
+        # 3. 우측: GPU, 네트워크 센티넬 듀얼 오실로스코프 및 프로세스 섹션 업데이트
+        self.gpu_section.update_data(gpu, procs, net)
 
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
@@ -136,6 +196,8 @@ class WhitePCBDashboard(QMainWindow):
                 self.showFullScreen()
         elif key == Qt.Key.Key_M:
             self._switch_screen()
+        elif key == Qt.Key.Key_T:
+            self.toggle_theme()
         elif key in (Qt.Key.Key_Escape, Qt.Key.Key_Q):
             self.close()
         else:
@@ -153,6 +215,8 @@ class WhitePCBDashboard(QMainWindow):
         self.showFullScreen()
 
     def closeEvent(self, event):
+        if hasattr(self, 'anim_timer') and self.anim_timer.isActive():
+            self.anim_timer.stop()
         if self.collector:
             self.collector.stop()
         event.accept()
@@ -164,6 +228,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("sys-dash")
     app.setDesktopFileName("sys-dash")
+    app.setFont(get_font_regular(10))
 
     dashboard = WhitePCBDashboard(target_monitor="HDMI-A-1")
     dashboard.setObjectName("sys-dash")

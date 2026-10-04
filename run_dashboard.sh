@@ -21,4 +21,8 @@ export QT_AUTO_SCREEN_SCALE_FACTOR=1
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
 
 echo "[+] Launching Cyberpunk System HUD on HDMI-A-1..."
-exec "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/main.py" "$@"
+if [ -x "$SCRIPT_DIR/dist/sys-dash" ]; then
+    exec "$SCRIPT_DIR/dist/sys-dash" "$@"
+else
+    exec "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/main.py" "$@"
+fi

@@ -1,12 +1,18 @@
 """
-화이트 PCB AIDA64 센서 패널 - CPU 섹션 (화면 꽉 찬 고밀도 튜닝)
-Ryzen 7 9800X3D, 대형 코어별 8개 오실로스코프, CPU 소켓 배지, 전압/전력/캐시, 4대 서멀 센서
+화이트 & 다크 PCB AIDA64 센서 패널 - CPU & 메인보드 섹션 (독립 분리 패널)
+- 패널 1: Ryzen 7 9800X3D CPU 독립 프레임
+- 패널 2: GIGABYTE B850I AORUS PRO 메인보드 독립 프레임 (실물 사진 + 버스 링크 펄스 + 서멀 센서)
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout
-from PyQt6.QtGui import QPainter, QPen, QColor, QBrush
-from PyQt6.QtCore import Qt, QRectF
-from theme import WhitePCBColor, get_font_bold, get_font_regular
+import os
+import math
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame
+)
+from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QPixmap, QPolygonF
+from PyQt6.QtCore import Qt, QRectF, QPointF, QTimer
+from theme import WhitePCBColor, ThemeManager, get_font_bold, get_font_regular
+from config import get_resource_path
 from widgets.pcb_components import CpuSocketBadge, LiquidDropBadge, VrmChipBadge
 from widgets.mini_scope import MiniScopeGraph
 from widgets.pcb_bar import PCBProgressBar
@@ -14,104 +20,115 @@ from widgets.pcb_bar import PCBProgressBar
 
 class PcbCpuSection(QWidget):
     """
-    화이트 PCB 센서패널 CPU 섹션 위젯
+    좌측 컬럼: CPU 독립 패널 + 메인보드 독립 패널
     """
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.meter_labels = []
         self._init_ui()
+        ThemeManager.register_listener(self.apply_theme)
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(18, 16, 18, 16)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(12)
 
-        # 1. 헤더: Ryzen 7 9800X3D & Temperature (°C)
+        # ==========================================
+        # 1. CPU 전용 독립 패널 (네모칸 1)
+        # ==========================================
+        self.cpu_frame = QFrame(self)
+        self.cpu_frame.setObjectName("cpu_frame")
+        cpu_layout = QVBoxLayout(self.cpu_frame)
+        cpu_layout.setContentsMargins(18, 14, 18, 14)
+        cpu_layout.setSpacing(8)
+
+        # 1-1. 헤더: 실물 CPU 사진 & 부스트 클럭 & 소켓 온도 배지
         top_h = QHBoxLayout()
         top_h.setSpacing(10)
 
         left_info = QVBoxLayout()
-        left_info.setSpacing(6)
+        left_info.setSpacing(5)
 
-        title_lbl = QLabel("Ryzen 7 9800X3D")
-        title_lbl.setFont(get_font_bold(22))
-        title_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()};")
-        left_info.addWidget(title_lbl)
+        title_h = QHBoxLayout()
+        title_h.setSpacing(8)
+        title_h.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        # CPU Clock 라벨 및 수치
+        cpu_photo_path = get_resource_path("assets/cpu_photo.png")
+        if os.path.exists(cpu_photo_path):
+            self.cpu_img_lbl = QLabel()
+            pix = QPixmap(cpu_photo_path).scaled(34, 34, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.cpu_img_lbl.setPixmap(pix)
+            title_h.addWidget(self.cpu_img_lbl)
+
+        self.cpu_title_lbl = QLabel("Ryzen 7 9800X3D")
+        self.cpu_title_lbl.setFont(get_font_bold(17))
+        title_h.addWidget(self.cpu_title_lbl)
+        title_h.addStretch()
+        left_info.addLayout(title_h)
+
         clk_h = QHBoxLayout()
-        clk_tag = QLabel("CPU Boost Clock")
-        clk_tag.setFont(get_font_bold(10))
-        clk_tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
+        self.clk_tag = QLabel("CPU Boost Clock")
+        self.clk_tag.setFont(get_font_regular(11))
         self.clk_val = QLabel("5,200 MHz")
-        self.clk_val.setFont(get_font_bold(10))
-        self.clk_val.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()};")
-        clk_h.addWidget(clk_tag)
+        self.clk_val.setFont(get_font_bold(12))
+        clk_h.addWidget(self.clk_tag)
         clk_h.addStretch()
         clk_h.addWidget(self.clk_val)
         left_info.addLayout(clk_h)
 
-        self.clk_bar = PCBProgressBar(max_val=5500.0, height=14, parent=self)
+        self.clk_bar = PCBProgressBar(max_val=5500.0, height=11, parent=self.cpu_frame)
         left_info.addWidget(self.clk_bar)
-
         top_h.addLayout(left_info, stretch=1)
 
-        # 우측: CPU 소켓 칩셋 온도 배지
         right_badge = QVBoxLayout()
         right_badge.setSpacing(2)
         right_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.temp_tag = QLabel("Temperature (°C)")
+        self.temp_tag.setFont(get_font_bold(10))
+        self.temp_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        right_badge.addWidget(self.temp_tag)
 
-        temp_tag = QLabel("Temperature (°C)")
-        temp_tag.setFont(get_font_bold(8))
-        temp_tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
-        temp_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        right_badge.addWidget(temp_tag)
-
-        self.cpu_badge = CpuSocketBadge(parent=self)
+        self.cpu_badge = CpuSocketBadge(parent=self.cpu_frame)
         right_badge.addWidget(self.cpu_badge)
         top_h.addLayout(right_badge, stretch=0)
+        cpu_layout.addLayout(top_h)
 
-        main_layout.addLayout(top_h)
-
-        # 2. CPU Utilization & 코어별 큼직한 8개 오실로스코프 그래프
+        # 1-2. 코어별 8개 오실로스코프 그래프
         util_h = QHBoxLayout()
-        util_tag = QLabel("CPU Utilization (Per-Core)")
-        util_tag.setFont(get_font_bold(10))
-        util_tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
+        self.util_tag = QLabel("CPU Utilization (Per-Core)")
+        self.util_tag.setFont(get_font_regular(11))
         self.util_total_lbl = QLabel("Total 5%")
-        self.util_total_lbl.setFont(get_font_bold(10))
-        self.util_total_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()};")
-        util_h.addWidget(util_tag)
+        self.util_total_lbl.setFont(get_font_bold(12))
+        util_h.addWidget(self.util_tag)
         util_h.addStretch()
         util_h.addWidget(self.util_total_lbl)
-        main_layout.addLayout(util_h)
+        cpu_layout.addLayout(util_h)
 
-        # 8개 코어 대형 미니 오실로스코프 (높이 125px로 확대)
         cores_layout = QHBoxLayout()
         cores_layout.setSpacing(4)
         self.core_scopes = []
         for i in range(8):
-            scope = MiniScopeGraph(max_points=24, show_labels=(i == 0 or i == 7), parent=self)
-            scope.setFixedHeight(125)
+            scope = MiniScopeGraph(max_points=24, show_labels=(i == 0 or i == 7), parent=self.cpu_frame)
+            scope.setFixedHeight(98)
             self.core_scopes.append(scope)
             cores_layout.addWidget(scope)
-        main_layout.addLayout(cores_layout)
+        cpu_layout.addLayout(cores_layout)
 
-        # 3. 전압, 전력, 3D V-Cache 게이지
+        # 1-3. 전압, 전력, 3D V-Cache 바 게이지
         def add_meter_row(label_text, default_val_str, max_v):
             h_box = QHBoxLayout()
             tag = QLabel(label_text)
-            tag.setFont(get_font_bold(9))
-            tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
+            tag.setFont(get_font_regular(10))
             val = QLabel(default_val_str)
-            val.setFont(get_font_bold(9))
-            val.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()};")
+            val.setFont(get_font_bold(11))
             h_box.addWidget(tag)
             h_box.addStretch()
             h_box.addWidget(val)
-            main_layout.addLayout(h_box)
+            cpu_layout.addLayout(h_box)
 
-            bar = PCBProgressBar(max_val=max_v, height=10, parent=self)
-            main_layout.addWidget(bar)
+            bar = PCBProgressBar(max_val=max_v, height=10, parent=self.cpu_frame)
+            cpu_layout.addWidget(bar)
+            self.meter_labels.append((tag, val))
             return val, bar
 
         self.volt_val, self.volt_bar = add_meter_row("Core Voltage", "1.150 V", 1.50)
@@ -119,71 +136,169 @@ class PcbCpuSection(QWidget):
         self.cache_val, self.cache_bar = add_meter_row("3D V-Cache (96MB L3)", "96 MB ALLOCATED (OPTIMAL)", 100.0)
         self.cache_bar.set_value(100.0)
 
-        # 4. CPU 60초 온도 추이 미니 와이드 오실로스코프
-        temp_trend_lbl = QLabel("CPU Temperature Trend (60s)")
-        temp_trend_lbl.setFont(get_font_bold(9))
-        temp_trend_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()}; margin-top: 4px;")
-        main_layout.addWidget(temp_trend_lbl)
+        # 1-4. CPU 온도 추이 그래프
+        self.temp_trend_lbl = QLabel("CPU Temperature Trend (60s)")
+        self.temp_trend_lbl.setFont(get_font_regular(10))
+        cpu_layout.addWidget(self.temp_trend_lbl)
 
-        self.temp_scope = MiniScopeGraph(max_points=40, show_labels=False, parent=self)
-        self.temp_scope.setFixedHeight(65)
-        main_layout.addWidget(self.temp_scope)
+        self.temp_scope = MiniScopeGraph(max_points=36, show_labels=False, parent=self.cpu_frame)
+        self.temp_scope.setFixedHeight(48)
+        cpu_layout.addWidget(self.temp_scope)
 
-        # 구분선
-        sep = QLabel()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background-color: {WhitePCBColor.BORDER_LIGHT.name()};")
-        main_layout.addWidget(sep)
+        main_layout.addWidget(self.cpu_frame, stretch=6)
 
-        # 5. 하단 서멀 센서: Liquid Temp, VRM Temp, Motherboard Temp
+        # ==========================================
+        # 2. 메인보드 전용 독립 패널 (네모칸 2)
+        # ==========================================
+        self.mobo_frame = QFrame(self)
+        self.mobo_frame.setObjectName("mobo_frame")
+        mobo_layout = QVBoxLayout(self.mobo_frame)
+        mobo_layout.setContentsMargins(18, 12, 18, 12)
+        mobo_layout.setSpacing(8)
+
+        # 2-1. 메인보드 헤더: 실물 사진 에셋 + 타이틀 + 버스 링크 펄스
+        mobo_title_h = QHBoxLayout()
+        mobo_title_h.setSpacing(8)
+        mobo_title_h.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        mobo_photo_path = get_resource_path("assets/mobo_photo.png")
+        self.mobo_img_lbl = QLabel()
+        if os.path.exists(mobo_photo_path):
+            pix_mobo = QPixmap(mobo_photo_path).scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.mobo_img_lbl.setPixmap(pix_mobo)
+        mobo_title_h.addWidget(self.mobo_img_lbl)
+
+        mobo_texts = QVBoxLayout()
+        mobo_texts.setSpacing(2)
+        self.mobo_title_lbl = QLabel("GIGABYTE B850I AORUS PRO")
+        self.mobo_title_lbl.setFont(get_font_bold(14))
+        self.mobo_sub_lbl = QLabel("BIOS: F13c  |  PCIe 5.0 x16 Link  |  AMD B850 ITX")
+        self.mobo_sub_lbl.setFont(get_font_regular(10))
+        mobo_texts.addWidget(self.mobo_title_lbl)
+        mobo_texts.addWidget(self.mobo_sub_lbl)
+        mobo_title_h.addLayout(mobo_texts)
+
+        mobo_title_h.addStretch()
+
+        # 우측 PCIe 버스 링크 펄스 위젯
+        self.bus_link_widget = QWidget()
+        self.bus_link_widget.setFixedSize(70, 32)
+        self.bus_phase = 0.0
+        self.bus_timer = QTimer(self)
+        self.bus_timer.timeout.connect(self._bus_tick)
+        self.bus_timer.start(40)
+        self.bus_link_widget.paintEvent = self._paint_bus_link
+        mobo_title_h.addWidget(self.bus_link_widget)
+
+        mobo_layout.addLayout(mobo_title_h)
+
+        # 2-2. 메인보드 서멀 센서 3종
         thermal_h = QHBoxLayout()
-        thermal_h.setSpacing(28)
+        thermal_h.setSpacing(24)
         thermal_h.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # 수온
         drop_col = QVBoxLayout()
         drop_col.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        drop_tag = QLabel("Liquid Temp")
-        drop_tag.setFont(get_font_bold(9))
-        drop_tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
-        self.liquid_badge = LiquidDropBadge(parent=self)
-        drop_col.addWidget(drop_tag, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.drop_tag = QLabel("Liquid Temp")
+        self.drop_tag.setFont(get_font_regular(10))
+        self.liquid_badge = LiquidDropBadge(parent=self.mobo_frame)
+        drop_col.addWidget(self.drop_tag, alignment=Qt.AlignmentFlag.AlignCenter)
         drop_col.addWidget(self.liquid_badge, alignment=Qt.AlignmentFlag.AlignCenter)
         thermal_h.addLayout(drop_col)
 
         # VRM 전원부 온도
         vrm_col = QVBoxLayout()
         vrm_col.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        vrm_tag = QLabel("VRM Temp")
-        vrm_tag.setFont(get_font_bold(9))
-        vrm_tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
-        self.vrm_badge = VrmChipBadge(parent=self)
-        vrm_col.addWidget(vrm_tag, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.vrm_tag = QLabel("VRM Temp")
+        self.vrm_tag.setFont(get_font_regular(10))
+        self.vrm_badge = VrmChipBadge(parent=self.mobo_frame)
+        vrm_col.addWidget(self.vrm_tag, alignment=Qt.AlignmentFlag.AlignCenter)
         vrm_col.addWidget(self.vrm_badge, alignment=Qt.AlignmentFlag.AlignCenter)
         thermal_h.addLayout(vrm_col)
 
         # PCH 칩셋 온도
         pch_col = QVBoxLayout()
         pch_col.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pch_tag = QLabel("PCH Temp")
-        pch_tag.setFont(get_font_bold(9))
-        pch_tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
-        self.pch_badge = VrmChipBadge(parent=self)
-        pch_col.addWidget(pch_tag, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.pch_tag = QLabel("PCH Temp")
+        self.pch_tag.setFont(get_font_regular(10))
+        self.pch_badge = VrmChipBadge(parent=self.mobo_frame)
+        pch_col.addWidget(self.pch_tag, alignment=Qt.AlignmentFlag.AlignCenter)
         pch_col.addWidget(self.pch_badge, alignment=Qt.AlignmentFlag.AlignCenter)
         thermal_h.addLayout(pch_col)
 
-        main_layout.addLayout(thermal_h)
+        mobo_layout.addLayout(thermal_h)
+        main_layout.addWidget(self.mobo_frame, stretch=4)
 
-    def paintEvent(self, event):
-        painter = QPainter(self)
+        self.apply_theme()
+
+    def _bus_tick(self):
+        self.bus_phase = (self.bus_phase + 0.08) % (math.pi * 2)
+        self.bus_link_widget.update()
+
+    def _paint_bus_link(self, event):
+        painter = QPainter(self.bus_link_widget)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        w, h = float(self.width()), float(self.height())
-        painter.setBrush(QBrush(WhitePCBColor.BG_PANEL))
-        painter.setPen(QPen(WhitePCBColor.BORDER_MAIN, 2.5))
-        painter.drawRect(QRectF(1, 1, w - 2, h - 2))
+        is_dark = ThemeManager.is_dark()
+        w = float(self.bus_link_widget.width())
 
-    def update_data(self, cpu_data):
+        # 4개의 데이터 링크 LED
+        for i in range(4):
+            px = 10.0 + i * 14.0
+            py = 10.0
+            shift = (self.bus_phase - i * 0.8) % (math.pi * 2)
+            intensity = (math.sin(shift) + 1.0) / 2.0
+            led_c = QColor(0, int(180 + 75 * intensity), int(220 + 35 * intensity)) if is_dark else QColor(int(200 + 55 * intensity), 80, 0)
+            painter.setBrush(QBrush(led_c))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QPointF(px, py), 2.5, 2.5)
+
+        painter.setFont(get_font_bold(8))
+        link_c = QColor(0, 220, 255) if is_dark else QColor(255, 110, 0)
+        painter.setPen(QPen(link_c))
+        painter.drawText(QRectF(0, 16, w, 14), Qt.AlignmentFlag.AlignCenter, "LINK ACTIVE")
+
+    def apply_theme(self):
+        c_bg = WhitePCBColor.BG_PANEL.name()
+        c_border = WhitePCBColor.BORDER_MAIN.name()
+        c_main = WhitePCBColor.TEXT_MAIN.name()
+        c_sub = WhitePCBColor.TEXT_SUB.name()
+        c_muted = WhitePCBColor.TEXT_MUTED.name()
+
+        frame_style = f"background-color: {c_bg}; border: 2.5px solid {c_border};"
+        self.cpu_frame.setStyleSheet(f"#cpu_frame {{ {frame_style} }}")
+        self.mobo_frame.setStyleSheet(f"#mobo_frame {{ {frame_style} }}")
+
+        self.cpu_title_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.clk_tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+        self.clk_val.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.temp_tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+        self.util_tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+        self.util_total_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.temp_trend_lbl.setStyleSheet(f"color: {c_sub}; margin-top: 2px; border: none; background: transparent;")
+
+        for tag, val in self.meter_labels:
+            tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+            val.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+
+        self.mobo_title_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.mobo_sub_lbl.setStyleSheet(f"color: {c_muted}; border: none; background: transparent;")
+
+        self.drop_tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+        self.vrm_tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+        self.pch_tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+
+        self.update()
+
+    def update_data(self, cpu_data, mobo_data=None):
+        if mobo_data:
+            vendor = mobo_data.get("vendor", "GIGABYTE")
+            board = mobo_data.get("board_name", "B850I AORUS PRO")
+            bios = mobo_data.get("bios_ver", "F13c")
+            chipset = mobo_data.get("chipset", "AMD B850")
+            self.mobo_title_lbl.setText(f"{vendor} {board}")
+            self.mobo_sub_lbl.setText(f"BIOS: {bios}  |  PCIe 5.0 x16 Link  |  {chipset} ITX")
+
         temp = cpu_data.get('temp_c', 45.0)
         self.cpu_badge.set_temp(temp)
         self.liquid_badge.set_temp(max(28, int(temp * 0.72)))

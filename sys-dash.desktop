@@ -1,11 +1,12 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Sys Dash HUD
-GenericName=System Telemetry Dashboard
-Comment=Cyberpunk Sci-Fi Hardware Dashboard for HDMI-A-1
-Exec=/home/kjh/Projects/Gemini_Job/Sys_Dash/run_dashboard.sh
-Icon=utilities-system-monitor
+Name=Sys Dash
+GenericName=AIDA64 Hardware Sensor Panel
+Comment=AIDA64 White PCB Telemetry Dashboard for HDMI-A-1
+Exec=/home/kjh/Projects/Gemini_Job/Sys_Dash/dist/sys-dash
+Icon=/home/kjh/.local/share/icons/sys-dash.png
 Terminal=false
-Categories=System;Monitor;HardwareSettings;
+Categories=System;Monitor;HardwareSettings;Settings;
+Keywords=system;monitor;telemetry;hardware;sensor;cpu;gpu;aida64;
 StartupWMClass=sys-dash

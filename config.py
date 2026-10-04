@@ -1,7 +1,15 @@
-"""
-Sys_Dash 환경설정 모듈 (User Configuration)
-대시보드의 모니터 타겟, 센서 주기, 임계값, 테마 옵션 등을 손쉽게 커스터마이징 가능
-"""
+import sys
+import os
+
+def get_resource_path(relative_path: str) -> str:
+    """
+    PyInstaller 번들 환경(sys._MEIPASS) 및 일반 파이썬 실행 환경 모두 지원하는 절대경로 반환
+    """
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, relative_path)
+
 
 class Config:
     # ==========================================
@@ -26,6 +34,7 @@ class Config:
     # ==========================================
     # 3. 비주얼 테마 및 디자인 설정
     # ==========================================
+    DEFAULT_THEME = "dark"            # 기본 테마 ("dark" 또는 "light")
     SHOW_HEXAGON_MESH = True          # 배경 헥사곤(벌집) 메쉬 텍스처 표시 여부
     SHOW_CORNER_BOLTS = True          # 4방향 코너 육각 볼트 마킹 표시 여부
     ROTATING_RING_ANIMATION = True    # 타코미터 내부 회전 링 애니메이션 활성화

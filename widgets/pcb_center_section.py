@@ -1,50 +1,30 @@
 """
-화이트 PCB AIDA64 센서 패널 - 중앙 섹션 (정밀 튜닝 버전)
-Trident Z RGB 메모리 모듈, 사선 시계/로고 바, SSD 스토리지, 쿨링 팬, 네트워크 대역폭
+화이트 & 다크 PCB AIDA64 센서 패널 - 중앙 섹션 (독립 분리 패널)
+- 패널 1: XPG LANCER RGB DDR5 64GB 독립 프레임
+- 중간: 사선 챔퍼 시계 & 날짜 바
+- 패널 2: Samsung 980 Pro SSD 스토리지 & 쿨링 팬 독립 프레임 (실물 사진 전용, SSD 아이콘 배지 삭제)
+- 패널 3: PipeWire Master Audio 독립 프레임 (실물 오디오 사진 + 8밴드 점핑 VU 이퀄라이저)
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout, QFrame
-from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QPainterPath
+import os
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout, QFrame
+)
+from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QPixmap
 from PyQt6.QtCore import Qt, QRectF, QPointF, QTimer
-from theme import WhitePCBColor, get_font_bold, get_font_regular
-from widgets.pcb_components import TridentZBadge
+from theme import WhitePCBColor, ThemeManager, get_font_bold, get_font_regular
+from config import get_resource_path
+from widgets.pcb_components import XpgLancerBadge, TridentZBadge, AudioVuVisualizer
 from widgets.pcb_bar import PCBProgressBar
 from widgets.pcb_panels import ClockLogoBar
 from widgets.mini_scope import MiniScopeGraph
 
 
-class SsdIconBadge(QWidget):
-    """레퍼런스 이미지의 SSD 드라이브 아이콘"""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(52, 62)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        w, h = float(self.width()), float(self.height())
-        rect = QRectF(3, 3, w - 6, h - 6)
-
-        painter.setBrush(QBrush(QColor(50, 54, 65)))
-        painter.setPen(QPen(QColor(25, 28, 35), 2.0))
-        painter.drawRoundedRect(rect, 4, 4)
-
-        painter.setBrush(QBrush(QColor(200, 205, 215)))
-        painter.setPen(Qt.PenStyle.NoPen)
-        for pt in [QPointF(8, 8), QPointF(w - 8, 8), QPointF(8, h - 8), QPointF(w - 8, h - 8)]:
-            painter.drawEllipse(pt, 2.0, 2.0)
-
-        painter.setFont(get_font_bold(10))
-        painter.setPen(QPen(Qt.GlobalColor.white))
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "SSD")
-
-
 class FanSpinBadge(QWidget):
-    """레퍼런스 이미지의 회전하는 쿨링 팬 아이콘"""
+    """회전하는 쿨링 팬 아이콘"""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(44, 44)
+        self.setFixedSize(40, 40)
         self.fan_angle = 0.0
 
         self.timer = QTimer(self)
@@ -62,28 +42,33 @@ class FanSpinBadge(QWidget):
         w, h = float(self.width()), float(self.height())
         cx, cy = w / 2.0, h / 2.0
         r = min(w, h) / 2.0 - 4.0
+        is_dark = ThemeManager.is_dark()
 
-        painter.setPen(QPen(WhitePCBColor.BORDER_MAIN, 2.0))
-        painter.setBrush(QBrush(QColor(45, 48, 58)))
+        painter.setPen(QPen(WhitePCBColor.BORDER_MAIN, 1.8))
+        bg_fan = QColor(25, 29, 40) if is_dark else QColor(45, 48, 58)
+        painter.setBrush(QBrush(bg_fan))
         painter.drawEllipse(QPointF(cx, cy), r, r)
 
         painter.save()
         painter.translate(cx, cy)
         painter.rotate(self.fan_angle)
-        painter.setPen(QPen(Qt.GlobalColor.white, 2.0))
+        blade_c = QColor(0, 220, 255) if is_dark else Qt.GlobalColor.white
+        painter.setPen(QPen(blade_c, 1.8))
         for i in range(5):
             painter.rotate(72)
-            painter.drawLine(0, 0, 0, int(r - 4))
+            painter.drawLine(0, 0, 0, int(r - 3))
         painter.restore()
 
 
 class PcbCenterSection(QWidget):
     """
-    화이트 PCB 센서패널 중앙 섹션 위젯
+    중앙 컬럼: RAM 독립 패널 + 시계 바 + 스토리지/쿨링 독립 패널 + 사운드 독립 패널
     """
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.spec_labels = []
         self._init_ui()
+        ThemeManager.register_listener(self.apply_theme)
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -91,160 +76,234 @@ class PcbCenterSection(QWidget):
         main_layout.setSpacing(12)
 
         # ==========================================
-        # 1. 상단: Trident Z RGB 메모리 모듈 패널
+        # 1. 상단: XPG LANCER RGB 메모리 독립 패널 (네모칸 1)
         # ==========================================
         self.ram_frame = QFrame(self)
         self.ram_frame.setObjectName("ram_frame")
-        self.ram_frame.setStyleSheet(
-            f"#ram_frame {{ background-color: {WhitePCBColor.BG_PANEL.name()}; border: 2.5px solid {WhitePCBColor.BORDER_MAIN.name()}; }}"
-        )
         ram_layout = QVBoxLayout(self.ram_frame)
-        ram_layout.setContentsMargins(16, 14, 16, 14)
+        ram_layout.setContentsMargins(16, 12, 16, 12)
         ram_layout.setSpacing(8)
 
-        ram_title = QLabel("Trident Z RGB (DDR5 64GB)")
-        ram_title.setFont(get_font_bold(16))
-        ram_title.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()}; border: none; background: transparent;")
-        ram_layout.addWidget(ram_title)
+        ram_title_h = QHBoxLayout()
+        ram_title_h.setSpacing(8)
+        ram_title_h.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        # RGB 램 히트싱크 그래픽
-        self.ram_badge = TridentZBadge(parent=self.ram_frame)
+        ram_photo_path = get_resource_path("assets/ram_photo.png")
+        if os.path.exists(ram_photo_path):
+            self.ram_img_lbl = QLabel()
+            pix = QPixmap(ram_photo_path).scaled(80, 24, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.ram_img_lbl.setPixmap(pix)
+            ram_title_h.addWidget(self.ram_img_lbl)
+
+        self.ram_title = QLabel("XPG LANCER RGB (DDR5 64GB)")
+        self.ram_title.setFont(get_font_bold(15))
+        ram_title_h.addWidget(self.ram_title)
+        ram_title_h.addStretch()
+        ram_layout.addLayout(ram_title_h)
+
+        self.ram_badge = XpgLancerBadge(parent=self.ram_frame)
         ram_layout.addWidget(self.ram_badge)
 
-        # Used Memory
         mem_h = QHBoxLayout()
-        mem_tag = QLabel("Used Memory")
-        mem_tag.setFont(get_font_bold(10))
-        mem_tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()}; border: none; background: transparent;")
+        self.mem_tag = QLabel("Used Memory")
+        self.mem_tag.setFont(get_font_bold(11))
         self.mem_val_lbl = QLabel("4,500 MB (7.2%)")
-        self.mem_val_lbl.setFont(get_font_bold(10))
-        self.mem_val_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()}; border: none; background: transparent;")
-        mem_h.addWidget(mem_tag)
+        self.mem_val_lbl.setFont(get_font_bold(12))
+        mem_h.addWidget(self.mem_tag)
         mem_h.addStretch()
         mem_h.addWidget(self.mem_val_lbl)
         ram_layout.addLayout(mem_h)
 
-        # 메모리 프로그레스 바
         self.mem_bar = PCBProgressBar(max_val=100.0, height=12, parent=self.ram_frame)
         ram_layout.addWidget(self.mem_bar)
 
-        # 세부 타이밍 스펙 (레퍼런스 스타일 2열)
+        # 타이밍 스펙
         timings_grid = QGridLayout()
-        timings_grid.setContentsMargins(0, 4, 0, 0)
-        timings_grid.setVerticalSpacing(2)
+        timings_grid.setContentsMargins(0, 4, 0, 2)
+        timings_grid.setVerticalSpacing(3)
+        timings_grid.setHorizontalSpacing(10)
 
-        def make_spec_lbl(text, is_val=False):
-            lbl = QLabel(text)
-            lbl.setFont(get_font_bold(8) if is_val else get_font_regular(8))
-            lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name() if is_val else WhitePCBColor.TEXT_MUTED.name()}; border: none; background: transparent;")
-            return lbl
+        specs = [
+            ("Timings", "30-36-36-76 CR1"),
+            ("Speed", "DDR5-6000"),
+            ("Voltage", "1.350 V"),
+            ("FCLK", "2000 MHz"),
+        ]
 
-        timings_grid.addWidget(make_spec_lbl("Timings"), 0, 0)
-        timings_grid.addWidget(make_spec_lbl("30-36-36-76 CR1", True), 0, 1)
-        timings_grid.addWidget(make_spec_lbl("Speed"), 1, 0)
-        timings_grid.addWidget(make_spec_lbl("DDR5-6000", True), 1, 1)
-
-        timings_grid.addWidget(make_spec_lbl("Voltage"), 0, 2)
-        timings_grid.addWidget(make_spec_lbl("1.350 V", True), 0, 3)
-        timings_grid.addWidget(make_spec_lbl("FCLK"), 1, 2)
-        timings_grid.addWidget(make_spec_lbl("2000 MHz", True), 1, 3)
+        for row, (k, v) in enumerate(specs):
+            lbl_k = QLabel(k)
+            lbl_k.setFont(get_font_regular(10))
+            lbl_v = QLabel(v)
+            lbl_v.setFont(get_font_bold(11))
+            lbl_v.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            timings_grid.addWidget(lbl_k, row, 0)
+            timings_grid.addWidget(lbl_v, row, 1)
+            self.spec_labels.append((lbl_k, lbl_v))
 
         ram_layout.addLayout(timings_grid)
         main_layout.addWidget(self.ram_frame, stretch=4)
 
         # ==========================================
-        # 2. 중앙: 시계 & 게이밍 로고 바
+        # 2. 중앙: 사선 챔퍼 시계 바
         # ==========================================
         self.clock_bar = ClockLogoBar(parent=self)
         main_layout.addWidget(self.clock_bar, stretch=0)
 
         # ==========================================
-        # 3. 하단: 스토리지 / 팬 / 네트워크 통합 패널
+        # 3. 스토리지(SSD) & 쿨링 팬 독립 패널 (네모칸 2)
+        # ※ SSD 아이콘 배지 삭제, 오직 실물 사진만 배치
         # ==========================================
-        self.bottom_frame = QFrame(self)
-        self.bottom_frame.setObjectName("bottom_frame")
-        self.bottom_frame.setStyleSheet(
-            f"#bottom_frame {{ background-color: {WhitePCBColor.BG_PANEL.name()}; border: 2.5px solid {WhitePCBColor.BORDER_MAIN.name()}; }}"
-        )
-        bot_layout = QVBoxLayout(self.bottom_frame)
-        bot_layout.setContentsMargins(16, 14, 16, 14)
-        bot_layout.setSpacing(10)
+        self.storage_frame = QFrame(self)
+        self.storage_frame.setObjectName("storage_frame")
+        stor_layout = QVBoxLayout(self.storage_frame)
+        stor_layout.setContentsMargins(16, 12, 16, 12)
+        stor_layout.setSpacing(6)
 
-        # [SSD 행]
-        ssd_h = QHBoxLayout()
-        ssd_h.setSpacing(10)
-        self.ssd_badge = SsdIconBadge(parent=self.bottom_frame)
-        ssd_h.addWidget(self.ssd_badge)
+        # SSD 헤더 (실물 사진 + 타이틀)
+        ssd_title_h = QHBoxLayout()
+        ssd_title_h.setSpacing(8)
+        ssd_title_h.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        ssd_info = QVBoxLayout()
-        ssd_lbl_h = QHBoxLayout()
-        ssd_tag = QLabel("C: Used (Samsung 980 Pro)")
-        ssd_tag.setFont(get_font_bold(9))
-        ssd_tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()}; border: none; background: transparent;")
+        ssd_photo_path = get_resource_path("assets/ssd_photo.png")
+        if os.path.exists(ssd_photo_path):
+            self.ssd_img_lbl = QLabel()
+            pix_ssd = QPixmap(ssd_photo_path).scaled(75, 21, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.ssd_img_lbl.setPixmap(pix_ssd)
+            ssd_title_h.addWidget(self.ssd_img_lbl)
+
+        self.ssd_tag = QLabel("Samsung 980 Pro (PCIe 4.0 NVMe)")
+        self.ssd_tag.setFont(get_font_bold(13))
+        ssd_title_h.addWidget(self.ssd_tag)
+        ssd_title_h.addStretch()
+
         self.ssd_val_lbl = QLabel("501 GB / 930 GB")
-        self.ssd_val_lbl.setFont(get_font_bold(9))
-        self.ssd_val_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()}; border: none; background: transparent;")
-        ssd_lbl_h.addWidget(ssd_tag)
-        ssd_lbl_h.addStretch()
-        ssd_lbl_h.addWidget(self.ssd_val_lbl)
-        ssd_info.addLayout(ssd_lbl_h)
+        self.ssd_val_lbl.setFont(get_font_bold(11))
+        ssd_title_h.addWidget(self.ssd_val_lbl)
+        stor_layout.addLayout(ssd_title_h)
 
-        self.ssd_bar = PCBProgressBar(max_val=100.0, height=10, parent=self.bottom_frame)
-        ssd_info.addWidget(self.ssd_bar)
+        # SSD 프로그레스 바
+        self.ssd_bar = PCBProgressBar(max_val=100.0, height=11, parent=self.storage_frame)
+        stor_layout.addWidget(self.ssd_bar)
 
-        # SSD 실시간 활동 미니 스코프
-        self.ssd_scope = MiniScopeGraph(max_points=24, show_labels=False, parent=self.bottom_frame)
-        self.ssd_scope.setFixedHeight(40)
-        ssd_info.addWidget(self.ssd_scope)
+        # SSD I/O 실시간 오실로스코프 및 쿨링 팬 나란히 배치
+        io_fan_h = QHBoxLayout()
+        io_fan_h.setSpacing(10)
 
-        ssd_h.addLayout(ssd_info)
-        bot_layout.addLayout(ssd_h)
+        # 좌측: 디스크 I/O 활동 파형
+        self.ssd_scope = MiniScopeGraph(max_points=24, show_labels=False, parent=self.storage_frame)
+        self.ssd_scope.setFixedHeight(42)
+        io_fan_h.addWidget(self.ssd_scope, stretch=1)
 
-        # 구분선
-        sep = QLabel()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background-color: {WhitePCBColor.BORDER_LIGHT.name()}; border: none;")
-        bot_layout.addWidget(sep)
-
-        # [팬 & 네트워크 듀얼 행]
-        dual_h = QHBoxLayout()
-        dual_h.setSpacing(16)
-
-        # 좌측: 쿨링 팬
+        # 우측: 회전 쿨링 팬
         fan_box = QHBoxLayout()
-        self.fan_badge = FanSpinBadge(parent=self.bottom_frame)
+        fan_box.setSpacing(6)
+        self.fan_badge = FanSpinBadge(parent=self.storage_frame)
         fan_box.addWidget(self.fan_badge)
 
         fan_texts = QVBoxLayout()
-        fan_texts.setSpacing(3)
+        fan_texts.setSpacing(2)
         self.cpu_fan_lbl = QLabel("CPU: 1140 RPM")
-        self.cpu_fan_lbl.setFont(get_font_bold(9))
-        self.cpu_fan_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()}; border: none; background: transparent;")
-        self.gpu_fan_lbl = QLabel("GPU: 0 RPM (IDLE)")
-        self.gpu_fan_lbl.setFont(get_font_bold(9))
-        self.gpu_fan_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()}; border: none; background: transparent;")
+        self.cpu_fan_lbl.setFont(get_font_bold(10))
+        self.gpu_fan_lbl = QLabel("GPU: 0 RPM")
+        self.gpu_fan_lbl.setFont(get_font_regular(10))
         fan_texts.addWidget(self.cpu_fan_lbl)
         fan_texts.addWidget(self.gpu_fan_lbl)
         fan_box.addLayout(fan_texts)
-        dual_h.addLayout(fan_box)
+        io_fan_h.addLayout(fan_box)
 
-        # 우측: 네트워크
-        net_box = QVBoxLayout()
-        net_box.setSpacing(3)
-        self.net_down_lbl = QLabel("▼ 0.6 MB/s (DOWN)")
-        self.net_down_lbl.setFont(get_font_bold(9))
-        self.net_down_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()}; border: none; background: transparent;")
-        self.net_up_lbl = QLabel("▲ 0.0 MB/s (UP)")
-        self.net_up_lbl.setFont(get_font_bold(9))
-        self.net_up_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()}; border: none; background: transparent;")
-        net_box.addWidget(self.net_down_lbl)
-        net_box.addWidget(self.net_up_lbl)
-        dual_h.addLayout(net_box)
+        stor_layout.addLayout(io_fan_h)
+        main_layout.addWidget(self.storage_frame, stretch=3)
 
-        bot_layout.addLayout(dual_h)
-        main_layout.addWidget(self.bottom_frame, stretch=5)
+        # ==========================================
+        # 4. 하단: 사운드 / 오디오 전용 독립 패널 (네모칸 3)
+        # ==========================================
+        self.audio_frame = QFrame(self)
+        self.audio_frame.setObjectName("audio_frame")
+        audio_layout = QVBoxLayout(self.audio_frame)
+        audio_layout.setContentsMargins(16, 10, 16, 10)
+        audio_layout.setSpacing(6)
 
-    def update_data(self, mem_data, disk_data, net_data, cpu_fan, gpu_fan):
+        # 4-1. 상단: 실물 사진 에셋 + 타이틀/디바이스 + 선명한 음량 수치
+        audio_top_h = QHBoxLayout()
+        audio_top_h.setSpacing(8)
+        audio_top_h.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        audio_photo_path = get_resource_path("assets/audio_photo.png")
+        self.audio_img_lbl = QLabel()
+        if os.path.exists(audio_photo_path):
+            pix_audio = QPixmap(audio_photo_path).scaled(46, 46, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.audio_img_lbl.setPixmap(pix_audio)
+        audio_top_h.addWidget(self.audio_img_lbl)
+
+        audio_texts = QVBoxLayout()
+        audio_texts.setSpacing(2)
+        self.audio_title_lbl = QLabel("PipeWire Master Audio")
+        self.audio_title_lbl.setFont(get_font_bold(13))
+        self.audio_dev_lbl = QLabel("USB Audio Speakers")
+        self.audio_dev_lbl.setFont(get_font_regular(10))
+        audio_texts.addWidget(self.audio_title_lbl)
+        audio_texts.addWidget(self.audio_dev_lbl)
+        audio_top_h.addLayout(audio_texts)
+
+        audio_top_h.addStretch()
+
+        # 대형 음량(볼륨) 수치 표시 라벨
+        self.audio_vol_lbl = QLabel("VOL 30%")
+        self.audio_vol_lbl.setFont(get_font_bold(13))
+        audio_top_h.addWidget(self.audio_vol_lbl)
+
+        audio_layout.addLayout(audio_top_h)
+
+        # 4-2. 하단: 실시간 볼륨 프로그레스 바 + 8밴드 점핑 VU 이퀄라이저
+        audio_bot_h = QHBoxLayout()
+        audio_bot_h.setSpacing(10)
+        audio_bot_h.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        self.audio_bar = PCBProgressBar(max_val=100.0, height=11, parent=self.audio_frame)
+        self.audio_bar.set_value(30.0)
+        audio_bot_h.addWidget(self.audio_bar, stretch=1)
+
+        self.vu_widget = AudioVuVisualizer(parent=self.audio_frame)
+        audio_bot_h.addWidget(self.vu_widget, stretch=0)
+
+        audio_layout.addLayout(audio_bot_h)
+        main_layout.addWidget(self.audio_frame, stretch=2)
+
+        self.apply_theme()
+
+    def apply_theme(self):
+        c_bg = WhitePCBColor.BG_PANEL.name()
+        c_border = WhitePCBColor.BORDER_MAIN.name()
+        c_main = WhitePCBColor.TEXT_MAIN.name()
+        c_sub = WhitePCBColor.TEXT_SUB.name()
+        c_muted = WhitePCBColor.TEXT_MUTED.name()
+
+        frame_style = f"background-color: {c_bg}; border: 2.5px solid {c_border};"
+        self.ram_frame.setStyleSheet(f"#ram_frame {{ {frame_style} }}")
+        self.storage_frame.setStyleSheet(f"#storage_frame {{ {frame_style} }}")
+        self.audio_frame.setStyleSheet(f"#audio_frame {{ {frame_style} }}")
+
+        self.ram_title.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.mem_tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+        self.mem_val_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+
+        for lbl_k, lbl_v in self.spec_labels:
+            lbl_k.setStyleSheet(f"color: {c_muted}; border: none; background: transparent;")
+            lbl_v.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+
+        self.ssd_tag.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.ssd_val_lbl.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+
+        self.cpu_fan_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.gpu_fan_lbl.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+
+        self.audio_title_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.audio_dev_lbl.setStyleSheet(f"color: {c_muted}; border: none; background: transparent;")
+        self.audio_vol_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+
+        self.update()
+
+    def update_data(self, mem_data, disk_data, cpu_fan, gpu_fan, audio_data=None):
         # 램
         used_mb = int(mem_data['used_gb'] * 1024)
         pct = mem_data['percent']
@@ -263,6 +322,18 @@ class PcbCenterSection(QWidget):
         self.cpu_fan_lbl.setText(f"CPU: {cpu_fan} RPM")
         self.gpu_fan_lbl.setText(f"GPU: {gpu_fan}%")
 
-        # 네트워크
-        self.net_down_lbl.setText(f"▼ {net_data['down_mb_s']:.1f} MB/s (DOWN)")
-        self.net_up_lbl.setText(f"▲ {net_data['up_mb_s']:.1f} MB/s (UP)")
+        # 오디오
+        if audio_data:
+            dev = audio_data.get("device", "USB Audio Speakers")
+            vol = audio_data.get("volume_percent", 30)
+            muted = audio_data.get("muted", False)
+            self.audio_dev_lbl.setText(dev)
+            if muted:
+                self.audio_vol_lbl.setText("MUTED")
+                self.audio_vol_lbl.setStyleSheet("color: #ff3c50; border: none; background: transparent;")
+                self.audio_bar.set_value(0.0)
+            else:
+                self.audio_vol_lbl.setText(f"VOL {vol}%")
+                self.audio_vol_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()}; border: none; background: transparent;")
+                self.audio_bar.set_value(vol)
+            self.vu_widget.set_data(audio_data)

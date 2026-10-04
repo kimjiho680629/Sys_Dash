@@ -1,12 +1,19 @@
 """
-화이트 PCB AIDA64 센서 패널 - GPU 섹션 (화면 꽉 찬 고밀도 튜닝)
-GeForce RTX 5070 Ti, 대형 GPU/FPS 오실로스코프, GPU 카드 배지, 메모리 클럭, 팬, 프로세스 테이블
+화이트 & 다크 PCB AIDA64 센서 패널 - GPU & 네트워크 & 프로세스 섹션 (독립 분리 패널)
+- 패널 1: GeForce RTX 5070 Ti 독립 프레임
+- 패널 2: Network Sentinel (Wi-Fi 6E) 독립 프레임 (실물 사진 + 듀얼 오실로스코프 + 패킷 스트림)
+- 패널 3: TOP 5 RESOURCE SENTINEL 프로세스 독립 프레임
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout
-from PyQt6.QtGui import QPainter, QPen, QColor, QBrush
-from PyQt6.QtCore import Qt, QRectF
-from theme import WhitePCBColor, get_font_bold, get_font_regular
+import os
+import math
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame
+)
+from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QPixmap
+from PyQt6.QtCore import Qt, QRectF, QTimer
+from theme import WhitePCBColor, ThemeManager, get_font_bold, get_font_regular
+from config import get_resource_path
 from widgets.pcb_components import GpuCardBadge
 from widgets.mini_scope import MiniScopeGraph
 from widgets.pcb_bar import PCBProgressBar
@@ -15,104 +22,115 @@ from widgets.process_table import TopProcessTable
 
 class PcbGpuSection(QWidget):
     """
-    화이트 PCB 센서패널 GPU 섹션 위젯
+    우측 컬럼: GPU 독립 패널 + 네트워크 독립 패널 + 프로세스 독립 패널
     """
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.meter_labels = []
         self._init_ui()
+        ThemeManager.register_listener(self.apply_theme)
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(18, 16, 18, 16)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(12)
 
-        # 1. 헤더: GeForce RTX 5070 Ti & Temperature (°C)
+        # ==========================================
+        # 1. GPU 전용 독립 패널 (네모칸 1)
+        # ==========================================
+        self.gpu_frame = QFrame(self)
+        self.gpu_frame.setObjectName("gpu_frame")
+        gpu_layout = QVBoxLayout(self.gpu_frame)
+        gpu_layout.setContentsMargins(18, 14, 18, 14)
+        gpu_layout.setSpacing(8)
+
+        # 1-1. 헤더: 실물 GPU 사진 & 클럭 & 그래픽카드 배지
         top_h = QHBoxLayout()
         top_h.setSpacing(10)
 
         left_info = QVBoxLayout()
-        left_info.setSpacing(6)
+        left_info.setSpacing(5)
 
-        title_lbl = QLabel("GeForce RTX 5070 Ti")
-        title_lbl.setFont(get_font_bold(20))
-        title_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()};")
-        left_info.addWidget(title_lbl)
+        title_h = QHBoxLayout()
+        title_h.setSpacing(8)
+        title_h.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        # GPU Clock 라벨 및 수치
+        gpu_photo_path = get_resource_path("assets/gpu_photo.png")
+        if os.path.exists(gpu_photo_path):
+            self.gpu_img_lbl = QLabel()
+            pix_gpu = QPixmap(gpu_photo_path).scaled(68, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.gpu_img_lbl.setPixmap(pix_gpu)
+            title_h.addWidget(self.gpu_img_lbl)
+
+        self.gpu_title_lbl = QLabel("GeForce RTX 5070 Ti")
+        self.gpu_title_lbl.setFont(get_font_bold(17))
+        title_h.addWidget(self.gpu_title_lbl)
+        title_h.addStretch()
+        left_info.addLayout(title_h)
+
         clk_h = QHBoxLayout()
-        clk_tag = QLabel("GPU Core Clock")
-        clk_tag.setFont(get_font_bold(10))
-        clk_tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
+        self.clk_tag = QLabel("GPU Core Clock")
+        self.clk_tag.setFont(get_font_regular(11))
         self.clk_val = QLabel("2,550 MHz")
-        self.clk_val.setFont(get_font_bold(10))
-        self.clk_val.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()};")
-        clk_h.addWidget(clk_tag)
+        self.clk_val.setFont(get_font_bold(12))
+        clk_h.addWidget(self.clk_tag)
         clk_h.addStretch()
         clk_h.addWidget(self.clk_val)
         left_info.addLayout(clk_h)
 
-        self.clk_bar = PCBProgressBar(max_val=3000.0, height=14, parent=self)
+        self.clk_bar = PCBProgressBar(max_val=3000.0, height=11, parent=self.gpu_frame)
         left_info.addWidget(self.clk_bar)
-
         top_h.addLayout(left_info, stretch=1)
 
-        # 우측: 그래픽카드 온도 배지
         right_badge = QVBoxLayout()
         right_badge.setSpacing(2)
         right_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.temp_tag = QLabel("Temperature (°C)")
+        self.temp_tag.setFont(get_font_bold(10))
+        self.temp_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        right_badge.addWidget(self.temp_tag)
 
-        temp_tag = QLabel("Temperature (°C)")
-        temp_tag.setFont(get_font_bold(8))
-        temp_tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
-        temp_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        right_badge.addWidget(temp_tag)
-
-        self.gpu_badge = GpuCardBadge(parent=self)
+        self.gpu_badge = GpuCardBadge(parent=self.gpu_frame)
         right_badge.addWidget(self.gpu_badge)
         top_h.addLayout(right_badge, stretch=0)
+        gpu_layout.addLayout(top_h)
 
-        main_layout.addLayout(top_h)
-
-        # 2. GPU Utilization & FPS 듀얼 대형 오실로스코프 그래프 (120px)
+        # 1-2. GPU Utl & FPS 듀얼 오실로스코프 그래프
         graph_labels_h = QHBoxLayout()
-        
         self.utl_lbl = QLabel("GPU Utl   10%")
-        self.utl_lbl.setFont(get_font_bold(10))
-        self.utl_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
+        self.utl_lbl.setFont(get_font_bold(11))
         graph_labels_h.addWidget(self.utl_lbl, stretch=1)
 
         self.fps_lbl = QLabel("FPS   144 FPS")
-        self.fps_lbl.setFont(get_font_bold(10))
-        self.fps_lbl.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
+        self.fps_lbl.setFont(get_font_bold(11))
         graph_labels_h.addWidget(self.fps_lbl, stretch=1)
-        main_layout.addLayout(graph_labels_h)
+        gpu_layout.addLayout(graph_labels_h)
 
         graphs_h = QHBoxLayout()
-        graphs_h.setSpacing(10)
-        self.utl_scope = MiniScopeGraph(max_points=32, show_labels=True, parent=self)
-        self.utl_scope.setFixedHeight(120)
-        self.fps_scope = MiniScopeGraph(max_points=32, show_labels=True, parent=self)
-        self.fps_scope.setFixedHeight(120)
+        graphs_h.setSpacing(8)
+        self.utl_scope = MiniScopeGraph(max_points=32, show_labels=True, parent=self.gpu_frame)
+        self.utl_scope.setFixedHeight(98)
+        self.fps_scope = MiniScopeGraph(max_points=32, show_labels=True, parent=self.gpu_frame)
+        self.fps_scope.setFixedHeight(98)
         graphs_h.addWidget(self.utl_scope)
         graphs_h.addWidget(self.fps_scope)
-        main_layout.addLayout(graphs_h)
+        gpu_layout.addLayout(graphs_h)
 
-        # 3. VRAM, Memory Clock, Voltage, Power 바 게이지들
+        # 1-3. VRAM, 클럭, 전압, 전력 바 게이지
         def add_meter_row(label_text, default_val_str, max_v):
             h_box = QHBoxLayout()
             tag = QLabel(label_text)
-            tag.setFont(get_font_bold(9))
-            tag.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
+            tag.setFont(get_font_regular(10))
             val = QLabel(default_val_str)
-            val.setFont(get_font_bold(9))
-            val.setStyleSheet(f"color: {WhitePCBColor.TEXT_MAIN.name()};")
+            val.setFont(get_font_bold(11))
             h_box.addWidget(tag)
             h_box.addStretch()
             h_box.addWidget(val)
-            main_layout.addLayout(h_box)
+            gpu_layout.addLayout(h_box)
 
-            bar = PCBProgressBar(max_val=max_v, height=10, parent=self)
-            main_layout.addWidget(bar)
+            bar = PCBProgressBar(max_val=max_v, height=10, parent=self.gpu_frame)
+            gpu_layout.addWidget(bar)
+            self.meter_labels.append((tag, val))
             return val, bar
 
         self.vram_val, self.vram_bar = add_meter_row("VRAM (GDDR7 16GB)", "1,640 MB (10.2%)", 100.0)
@@ -121,31 +139,114 @@ class PcbGpuSection(QWidget):
         self.volt_val, self.volt_bar = add_meter_row("Core Voltage", "0.850 V", 1.20)
         self.pwr_val, self.pwr_bar = add_meter_row("Package Power (TGP)", "38.10 W | 13%", 300.0)
 
-        # 구분선
-        sep = QLabel()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background-color: {WhitePCBColor.BORDER_LIGHT.name()};")
-        main_layout.addWidget(sep)
+        main_layout.addWidget(self.gpu_frame, stretch=6)
 
-        # 4. 하단: 상위 프로세스 HUD 센티넬 테이블 (160px 대형화)
-        proc_title = QLabel("TOP 5 RESOURCE SENTINEL (ACTIVE TASKS)")
-        proc_title.setFont(get_font_bold(9))
-        proc_title.setStyleSheet(f"color: {WhitePCBColor.TEXT_SUB.name()};")
-        main_layout.addWidget(proc_title)
+        # ==========================================
+        # 2. 네트워크 센티넬 전용 독립 패널 (네모칸 2)
+        # ==========================================
+        self.net_frame = QFrame(self)
+        self.net_frame.setObjectName("net_frame")
+        net_layout = QVBoxLayout(self.net_frame)
+        net_layout.setContentsMargins(16, 10, 16, 10)
+        net_layout.setSpacing(6)
 
-        self.proc_table = TopProcessTable(parent=self)
-        self.proc_table.setFixedHeight(160)
-        main_layout.addWidget(self.proc_table)
+        # 네트워크 헤더 (실물 사진 에셋 + 타이틀 + 대역폭 수치)
+        net_title_h = QHBoxLayout()
+        net_title_h.setSpacing(8)
+        net_title_h.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        w, h = float(self.width()), float(self.height())
-        painter.setBrush(QBrush(WhitePCBColor.BG_PANEL))
-        painter.setPen(QPen(WhitePCBColor.BORDER_MAIN, 2.5))
-        painter.drawRect(QRectF(1, 1, w - 2, h - 2))
+        net_photo_path = get_resource_path("assets/net_photo.png")
+        self.net_img_lbl = QLabel()
+        if os.path.exists(net_photo_path):
+            pix_net = QPixmap(net_photo_path).scaled(46, 46, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.net_img_lbl.setPixmap(pix_net)
+        net_title_h.addWidget(self.net_img_lbl)
 
-    def update_data(self, gpu_data, procs):
+        net_texts = QVBoxLayout()
+        net_texts.setSpacing(2)
+        self.net_title_lbl = QLabel("Network Sentinel (Wi-Fi 6E)")
+        self.net_title_lbl.setFont(get_font_bold(13))
+        self.net_sub_lbl = QLabel("wlp8s0  |  IP: 192.168.50.206")
+        self.net_sub_lbl.setFont(get_font_regular(10))
+        net_texts.addWidget(self.net_title_lbl)
+        net_texts.addWidget(self.net_sub_lbl)
+        net_title_h.addLayout(net_texts)
+
+        net_title_h.addStretch()
+
+        self.net_rate_lbl = QLabel("▼ 0.0 MB/s   ▲ 0.0 MB/s")
+        self.net_rate_lbl.setFont(get_font_bold(11))
+        net_title_h.addWidget(self.net_rate_lbl)
+
+        net_layout.addLayout(net_title_h)
+
+        # 실시간 다운/업로드 듀얼 미니 오실로스코프 그래프
+        net_scopes_h = QHBoxLayout()
+        net_scopes_h.setSpacing(8)
+
+        self.down_scope = MiniScopeGraph(max_points=28, show_labels=False, parent=self.net_frame)
+        self.down_scope.setFixedHeight(46)
+        net_scopes_h.addWidget(self.down_scope)
+
+        self.up_scope = MiniScopeGraph(max_points=28, show_labels=False, parent=self.net_frame)
+        self.up_scope.setFixedHeight(46)
+        net_scopes_h.addWidget(self.up_scope)
+
+        net_layout.addLayout(net_scopes_h)
+        main_layout.addWidget(self.net_frame, stretch=2)
+
+        # ==========================================
+        # 3. 상위 프로세스 HUD 센티넬 독립 패널 (네모칸 3)
+        # ==========================================
+        self.proc_frame = QFrame(self)
+        self.proc_frame.setObjectName("proc_frame")
+        proc_layout = QVBoxLayout(self.proc_frame)
+        proc_layout.setContentsMargins(16, 8, 16, 8)
+        proc_layout.setSpacing(4)
+
+        self.proc_title = QLabel("TOP 5 RESOURCE SENTINEL (ACTIVE TASKS)")
+        self.proc_title.setFont(get_font_bold(10))
+        proc_layout.addWidget(self.proc_title)
+
+        self.proc_table = TopProcessTable(parent=self.proc_frame)
+        self.proc_table.setFixedHeight(116)
+        proc_layout.addWidget(self.proc_table)
+
+        main_layout.addWidget(self.proc_frame, stretch=3)
+
+        self.apply_theme()
+
+    def apply_theme(self):
+        c_bg = WhitePCBColor.BG_PANEL.name()
+        c_border = WhitePCBColor.BORDER_MAIN.name()
+        c_main = WhitePCBColor.TEXT_MAIN.name()
+        c_sub = WhitePCBColor.TEXT_SUB.name()
+        c_muted = WhitePCBColor.TEXT_MUTED.name()
+
+        frame_style = f"background-color: {c_bg}; border: 2.5px solid {c_border};"
+        self.gpu_frame.setStyleSheet(f"#gpu_frame {{ {frame_style} }}")
+        self.net_frame.setStyleSheet(f"#net_frame {{ {frame_style} }}")
+        self.proc_frame.setStyleSheet(f"#proc_frame {{ {frame_style} }}")
+
+        self.gpu_title_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.clk_tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+        self.clk_val.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.temp_tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+        self.utl_lbl.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+        self.fps_lbl.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+
+        for tag, val in self.meter_labels:
+            tag.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+            val.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+
+        self.net_title_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.net_sub_lbl.setStyleSheet(f"color: {c_muted}; border: none; background: transparent;")
+        self.net_rate_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
+        self.proc_title.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
+
+        self.update()
+
+    def update_data(self, gpu_data, procs, net_data=None):
         temp = gpu_data.get('temp_c', 35)
         self.gpu_badge.set_temp(temp)
 
@@ -180,5 +281,16 @@ class PcbGpuSection(QWidget):
 
         self.volt_val.setText("0.850 V")
         self.volt_bar.set_value(0.850)
+
+        # 네트워크 모듈 갱신
+        if net_data:
+            iface = net_data.get("iface", "wlp8s0")
+            ip = net_data.get("ip", "192.168.50.206")
+            down_mb = net_data.get("down_mb_s", 0.0)
+            up_mb = net_data.get("up_mb_s", 0.0)
+            self.net_sub_lbl.setText(f"{iface}  |  IP: {ip}")
+            self.net_rate_lbl.setText(f"▼ {down_mb:.1f} MB/s   ▲ {up_mb:.1f} MB/s")
+            self.down_scope.add_point(min(100.0, down_mb * 10.0))
+            self.up_scope.add_point(min(100.0, up_mb * 20.0))
 
         self.proc_table.set_processes(procs)
