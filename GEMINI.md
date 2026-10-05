@@ -13,7 +13,7 @@
 - **Audio System**: PipeWire Master Audio Engine / WirePlumber (`USB Audio Speakers`, 실시간 음량 바 & 대형 볼륨 수치 + 8밴드 점핑 VU 미터)
 - **RAM**: DDR5 64GB (ADATA XPG LANCER RGB 듀얼 채널, 실시간 오로라 무지개 웨이브)
 - **Storage**: Samsung 980 Pro / PM9A1 PCIe Gen4 NVMe SSD (실물 누끼 사진 전용 배치)
-- **Network**: Wi-Fi 6E / LAN (`wlp8s0`, IP: `192.168.50.206`, 실시간 업/다운 듀얼 오실로스코프)
+- **Network / Router**: ASUS ROG Rapture GT-AX11000 Tri-Band Wi-Fi 6 Gaming Router (`wlp8s0`, IP: `192.168.50.206`, 실시간 업/다운 듀얼 오실로스코프)
 - **Target Display**: `HDMI-A-1` (ARZOPA 2560x1440 @ 144Hz, Scale 1.25)
 - **OS / Window Manager**: Arch Linux / Hyprland (Wayland)
 - **표준 폰트**: `FiraCode Nerd Font` (개발자 친화적 고정폭 서체, 전 컴포넌트 표준화)
@@ -30,7 +30,7 @@
 │    (cpu_photo.png + 9800X3D)    │    (ram_photo.png + DDR5 64GB)  │    (gpu_photo.png + 5070 Ti)    │
 │                                 │ 2. 사선 챔퍼 디지털 시계 바      │                                 │
 │ 2. 메인보드 전용 독립 패널       │ 3. SSD 스토리지 & 팬 패널       │ 2. 네트워크 센티넬 패널         │
-│    (mobo_photo.png + B850I)     │    (ssd_photo.png 사진 전용)    │    (net_photo.png + Wi-Fi 6E)   │
+│    (mobo_photo.png + B850I)     │    (ssd_photo.png 사진 전용)    │    (net_photo.png + GT-AX11000) │
 │    - PCIe 버스 링크 펄스 애니    │    - C: 점유율 + I/O 오실로스코프 │    - 다운/업로드 듀얼 스코프    │
 │    - 3대 서멀 배지 (수온/VRM/PCH) │ 4. PipeWire 사운드 패널         │ 3. 프로세스 센티넬 패널         │
 │                                 │    (audio_photo.png + Master)   │    - TOP 5 활성 프로세스 테이블 │
@@ -52,7 +52,7 @@
    - **SSD**: `assets/ssd_photo.png` (Samsung 980 Pro M.2 스틱 투명 누끼, 75x21)
    - **Motherboard**: `assets/mobo_photo.png` (GIGABYTE B850I AORUS PRO 실물 ITX 보드, **48x48 확대**)
    - **Audio**: `assets/audio_photo.png` (하이엔드 데스크톱 USB DAC 스피커 실물, **46x46 확대**)
-   - **Network**: `assets/net_photo.png` (게이밍 Wi-Fi 6E 고성능 듀얼 안테나 베이스 실물, **46x46 확대**)
+   - **Network**: `assets/net_photo.png` (ASUS ROG Rapture GT-AX11000 8-안테나 실물 게이밍 공유기, **48x48 확대**)
 
 3. **CPU & 메인보드 섹션 (좌측 컬럼)**:
    - **패널 1: CPU 전용 독립 패널 (`cpu_frame`)**:
@@ -91,7 +91,7 @@
      - 우측 상단 **그래픽카드 배지** (회전 쿨링 팬 + X자형 네온 RGB 브리딩 글로우 + 대형 흰색 온도 `36°C`).
      - `VRAM (GDDR7 16GB)`, `GDDR7 Memory Clock (14,001 MHz)`, `Core Voltage`, `Package Power (TGP 300W Cap)`.
    - **패널 2: 네트워크 센티넬 전용 독립 패널 (`net_frame`)**:
-     - **`net_photo.png` (46x46)** + `Network Sentinel (Wi-Fi 6E)` 타이틀.
+     - **`net_photo.png` (48x48)** + `ASUS ROG GT-AX11000` 타이틀.
      - 활성 인터페이스(`wlp8s0`) 및 IP 주소(`192.168.50.206`).
      - 실시간 대역폭 수치 (`▼ 1.2 MB/s   ▲ 0.3 MB/s`) + TX/RX 패킷 스트림 점멸 애니메이션.
      - **실시간 다운로드 & 업로드 듀얼 미니 오실로스코프 그래프**.
@@ -128,7 +128,7 @@
 │   ├── ssd_photo.png           # Samsung 980 PRO PCIe 4.0 NVMe M.2 실물 스틱 (75x21)
 │   ├── mobo_photo.png          # GIGABYTE B850I AORUS PRO ITX 메인보드 실물 (48x48)
 │   ├── audio_photo.png         # 하이엔드 데스크톱 USB DAC 스피커 실물 (46x46)
-│   └── net_photo.png           # 게이밍 Wi-Fi 6E 고성능 듀얼 안테나 베이스 실물 (46x46)
+│   └── net_photo.png           # ASUS ROG Rapture GT-AX11000 실물 게이밍 공유기 (48x48)
 ├── dist/
 │   └── sys-dash                # [핵심] 컴파일된 단일 독립 실행 바이너리 (80MB)
 ├── sys-dash                    # 프로젝트 루트 단일 바이너리 심볼릭 링크

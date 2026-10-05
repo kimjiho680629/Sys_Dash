@@ -158,13 +158,13 @@ class PcbGpuSection(QWidget):
         net_photo_path = get_resource_path("assets/net_photo.png")
         self.net_img_lbl = QLabel()
         if os.path.exists(net_photo_path):
-            pix_net = QPixmap(net_photo_path).scaled(46, 46, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            pix_net = QPixmap(net_photo_path).scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.net_img_lbl.setPixmap(pix_net)
         net_title_h.addWidget(self.net_img_lbl)
 
         net_texts = QVBoxLayout()
         net_texts.setSpacing(2)
-        self.net_title_lbl = QLabel("Network Sentinel (Wi-Fi 6E)")
+        self.net_title_lbl = QLabel("ASUS ROG GT-AX11000")
         self.net_title_lbl.setFont(get_font_bold(13))
         self.net_sub_lbl = QLabel("wlp8s0  |  IP: 192.168.50.206")
         self.net_sub_lbl.setFont(get_font_regular(10))
