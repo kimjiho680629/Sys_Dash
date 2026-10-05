@@ -8,7 +8,7 @@
 ## 1. 하드웨어 및 시스템 사양
 
 - **CPU**: AMD Ryzen 7 9800X3D (8-Core / 16-Thread, 부스트 최대 ~5.2GHz, 96MB 3D V-Cache)
-- **GPU**: NVIDIA GeForce RTX 5070 Ti 16GB GDDR7 (Blackwell GB203 아키텍처, 300W TGP)
+- **GPU**: INNO3D GeForce RTX 5070 Ti X3 16GB GDDR7 (Blackwell GB203 아키텍처, 300W TGP, 3팬 메탈릭 슈라우드)
 - **Motherboard**: GIGABYTE B850I AORUS PRO (AMD B850 칩셋 ITX, BIOS: F13c, PCIe 5.0 x16 Link)
 - **Audio System**: PipeWire Master Audio Engine / WirePlumber (`USB Audio Speakers`, 실시간 음량 바 & 대형 볼륨 수치 + 8밴드 점핑 VU 미터)
 - **RAM**: DDR5 64GB (ADATA XPG LANCER RGB 듀얼 채널, 실시간 오로라 무지개 웨이브)
@@ -47,7 +47,7 @@
 
 2. **실물 하드웨어 포토 배지 (확대 규격 인라인 에셋 7종)**:
    - **CPU**: `assets/cpu_photo.png` (9800X3D 정면 칩셋 투명 누끼, 34x34)
-   - **GPU**: `assets/gpu_photo.png` (RTX 5070 Ti 파운더스 카드 투명 누끼, 68x32)
+   - **GPU**: `assets/gpu_photo.png` (INNO3D RTX 5070 Ti X3 실물 트리플 팬 투명 누끼, **92x38 확대**)
    - **RAM**: `assets/ram_photo.png` (XPG LANCER RGB 방열판 투명 누끼, 80x24)
    - **SSD**: `assets/ssd_photo.png` (Samsung 980 Pro M.2 스틱 투명 누끼, 75x21)
    - **Motherboard**: `assets/mobo_photo.png` (GIGABYTE B850I AORUS PRO 실물 ITX 보드, **48x48 확대**)
@@ -86,7 +86,7 @@
 
 5. **GPU & 네트워크 섹션 (우측 컬럼)**:
    - **패널 1: GPU 전용 독립 패널 (`gpu_frame`)**:
-     - 실물 RTX 5070 Ti 사진 + `GeForce RTX 5070 Ti` 헤더 및 코어 클럭(최대 2550MHz) 바.
+     - 실물 INNO3D X3 사진 + `INNO3D RTX 5070 Ti` 헤더 및 코어 클럭(최대 2550MHz) 바.
      - **GPU Utl & FPS 듀얼 오실로스코프 그래프** (실시간 부하율 및 144Hz 프레임레이트).
      - 우측 상단 **그래픽카드 배지** (회전 쿨링 팬 + X자형 네온 RGB 브리딩 글로우 + 대형 흰색 온도 `36°C`).
      - `VRAM (GDDR7 16GB)`, `GDDR7 Memory Clock (14,001 MHz)`, `Core Voltage`, `Package Power (TGP 300W Cap)`.
@@ -123,7 +123,7 @@
 ├── .venv/                      # Python 가상환경
 ├── assets/                     # 실물 하드웨어 투명 누끼 PNG 사진 에셋 (7종)
 │   ├── cpu_photo.png           # AMD Ryzen 7 9800X3D 정면 실물 칩셋 (34x34)
-│   ├── gpu_photo.png           # NVIDIA GeForce RTX 5070 Ti 실물 그래픽카드 (68x32)
+│   ├── gpu_photo.png           # INNO3D GeForce RTX 5070 Ti X3 실물 그래픽카드 (92x38 확대)
 │   ├── ram_photo.png           # ADATA XPG LANCER RGB DDR5 실물 램 스틱 (80x24)
 │   ├── ssd_photo.png           # Samsung 980 PRO PCIe 4.0 NVMe M.2 실물 스틱 (75x21)
 │   ├── mobo_photo.png          # GIGABYTE B850I AORUS PRO ITX 메인보드 실물 (48x48)

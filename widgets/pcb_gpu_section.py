@@ -58,11 +58,11 @@ class PcbGpuSection(QWidget):
         gpu_photo_path = get_resource_path("assets/gpu_photo.png")
         if os.path.exists(gpu_photo_path):
             self.gpu_img_lbl = QLabel()
-            pix_gpu = QPixmap(gpu_photo_path).scaled(68, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            pix_gpu = QPixmap(gpu_photo_path).scaled(92, 38, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.gpu_img_lbl.setPixmap(pix_gpu)
             title_h.addWidget(self.gpu_img_lbl)
 
-        self.gpu_title_lbl = QLabel("GeForce RTX 5070 Ti")
+        self.gpu_title_lbl = QLabel("INNO3D RTX 5070 Ti")
         self.gpu_title_lbl.setFont(get_font_bold(17))
         title_h.addWidget(self.gpu_title_lbl)
         title_h.addStretch()
