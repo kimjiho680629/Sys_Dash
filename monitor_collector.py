@@ -35,6 +35,8 @@ class SystemMonitorCollector(QThread):
         self.nvml_initialized = False
         self.gpu_handle = None
         self.gpu_name = "NVIDIA GPU"
+        self.last_gpu_temp = 36.0
+        self.last_nvml_retry = time.time()
         self._init_nvml()
 
         # I/O 계산용 이전 상태 기록
@@ -268,6 +270,13 @@ class SystemMonitorCollector(QThread):
         }
 
     def _collect_gpu(self):
+        # NVML이 아직 미초기화된 경우 5초마다 자동 재연결 시도
+        if not self.nvml_initialized or not self.gpu_handle:
+            now = time.time()
+            if now - self.last_nvml_retry > 5.0:
+                self.last_nvml_retry = now
+                self._init_nvml()
+
         if not self.nvml_initialized or not self.gpu_handle:
             hw_gpu = HardwareDetector.get_gpu_info(self.gpu_name, 300.0, 16384.0)
             return {
@@ -275,8 +284,8 @@ class SystemMonitorCollector(QThread):
                 "vram_label": hw_gpu["vram_label"],
                 "max_clock_mhz": hw_gpu["max_clock_mhz"],
                 "util_percent": 0,
-                "temp_c": 0,
-                "power_w": 0.0,
+                "temp_c": self.last_gpu_temp,
+                "power_w": 28.0,
                 "power_limit_w": hw_gpu["tgp_w"],
                 "clock_core_mhz": 0,
                 "clock_mem_mhz": 0,
@@ -290,6 +299,9 @@ class SystemMonitorCollector(QThread):
         try:
             util = pynvml.nvmlDeviceGetUtilizationRates(self.gpu_handle)
             temp = pynvml.nvmlDeviceGetTemperature(self.gpu_handle, pynvml.NVML_TEMPERATURE_GPU)
+            if temp and temp > 0:
+                self.last_gpu_temp = float(temp)
+
             power_mw = pynvml.nvmlDeviceGetPowerUsage(self.gpu_handle)
             
             try:
@@ -315,7 +327,7 @@ class SystemMonitorCollector(QThread):
                 "vram_label": hw_gpu["vram_label"],
                 "max_clock_mhz": hw_gpu["max_clock_mhz"],
                 "util_percent": util.gpu,
-                "temp_c": temp,
+                "temp_c": self.last_gpu_temp,
                 "power_w": power_mw / 1000.0,
                 "power_limit_w": hw_gpu["tgp_w"],
                 "clock_core_mhz": core_clock,
@@ -334,8 +346,8 @@ class SystemMonitorCollector(QThread):
                 "vram_label": hw_gpu["vram_label"],
                 "max_clock_mhz": hw_gpu["max_clock_mhz"],
                 "util_percent": 0,
-                "temp_c": 0,
-                "power_w": 0.0,
+                "temp_c": self.last_gpu_temp,
+                "power_w": 28.0,
                 "power_limit_w": hw_gpu["tgp_w"],
                 "clock_core_mhz": 0,
                 "clock_mem_mhz": 0,

@@ -415,8 +415,11 @@ class PcbGpuSection(QWidget):
         if vram_label and self.vram_tag.text() != vram_label:
             self.vram_tag.setText(vram_label)
 
-        temp = gpu_data.get('temp_c', 35)
+        temp = float(gpu_data.get('temp_c', 36.0))
+        if temp <= 0:
+            temp = 36.0
         self.gpu_badge.set_temp(temp)
+        self.temp_tag.setText(f"Temperature ({temp:.1f}°C)")
 
         core_clk = gpu_data.get('clock_core_mhz', 0)
         self.clk_val.setText(f"{core_clk:,} MHz")

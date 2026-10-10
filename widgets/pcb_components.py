@@ -118,8 +118,10 @@ class GpuCardBadge(QWidget):
         self.update()
 
     def set_temp(self, temp):
-        self.temp_c = int(round(temp))
-        self.update()
+        t_val = int(round(temp))
+        if t_val > 0:
+            self.temp_c = t_val
+            self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
