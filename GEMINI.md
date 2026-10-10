@@ -115,7 +115,7 @@
   - `k10temp` (Linux hwmon): AMD Zen 5 단일 CCD 물리 접합부 실시간 다이 온도(`Tccd1`) 우선 수집 (제어용 평활화 `Tctl` 우회로 50°C 고정 현상 완전 해결)
   - `RAPL powercap` (`/sys/class/powercap/intel-rapl:0/energy_uj`): 초당 에너지 미분 연산을 통한 실시간 CPU 패키지 소비전력(W) 정밀 측정
   - `it8686` (ISA hwmon): 실시간 CPU Vcore 전압(`in0`), CPU 팬 속도(`fan1`), 메인보드 VRM 온도(`temp2`), PCH 칩셋 온도(`temp4`) 직접 연동
-  - `nvidia-ml-py`: 프로세스 fork/exec 없이 공유 라이브러리(C 바인딩)로 GPU 센서 직접 호출 (오버헤드 0%)
+  - `nvidia-ml-py`: 프로세스 fork/exec 없이 공유 라이브러리(C 바인딩)로 GPU 센서 직접 호출 (오버헤드 0%, 패키지 업데이트 후 재부팅 전 드라이버 버전 불일치 시 36°C 안전 폴백 및 5초 주기 백그라운드 자동 복구 재연결 탑재)
   - `psutil`: 최적화된 C 확장을 통한 CPU 코어별 클럭, RAM, 스토리지 I/O, 네트워크 대역폭 및 프로세스 수집
   - `wpctl`: PipeWire / WirePlumber 마스터 오디오 싱크 볼륨 및 상태 수집
   - `DMI sysfs`: `/sys/class/dmi/id/` 커널 인터페이스를 통한 메인보드 모델 및 BIOS 버전 수집
