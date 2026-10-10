@@ -83,7 +83,7 @@ class PcbCpuSection(QWidget):
         right_badge = QVBoxLayout()
         right_badge.setSpacing(2)
         right_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.temp_tag = QLabel("Temperature (°C)")
+        self.temp_tag = QLabel("Core Temp (°C)")
         self.temp_tag.setFont(get_font_bold(10))
         self.temp_tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
         right_badge.addWidget(self.temp_tag)
@@ -299,11 +299,20 @@ class PcbCpuSection(QWidget):
             self.mobo_title_lbl.setText(f"{vendor} {board}")
             self.mobo_sub_lbl.setText(f"BIOS: {bios}  |  PCIe 5.0 x16 Link  |  {chipset} ITX")
 
-        temp = cpu_data.get('temp_c', 45.0)
+            # 실제 메인보드 센서(it8686) 온도 반영
+            vrm_t = mobo_data.get("vrm_temp", 55.0)
+            pch_t = mobo_data.get("pch_temp", 47.0)
+            self.vrm_badge.set_temp(int(round(vrm_t)))
+            self.pch_badge.set_temp(int(round(pch_t)))
+
+        temp = float(cpu_data.get('temp_c', 43.0))
         self.cpu_badge.set_temp(temp)
-        self.liquid_badge.set_temp(max(28, int(temp * 0.72)))
-        self.vrm_badge.set_temp(int(temp + 2))
-        self.pch_badge.set_temp(int(temp - 3))
+        # 상단 태그에 실시간 소수점 1자리 정밀 온도 반영
+        self.temp_tag.setText(f"Core Temp ({temp:.1f}°C)")
+
+        # 커스텀 수랭/AIO 냉각수 수온 모델 (안정적 28~36°C)
+        liquid_t = max(26, min(42, int(26 + (temp - 35) * 0.3)))
+        self.liquid_badge.set_temp(liquid_t)
         self.temp_scope.add_point(temp)
 
         tot_pct = cpu_data.get('total_percent', 0.0)
@@ -320,8 +329,12 @@ class PcbCpuSection(QWidget):
             p = threads_pct[t_idx] if t_idx < len(threads_pct) else 0.0
             self.core_scopes[i].add_point(p)
 
-        est_pwr = 28.0 + (tot_pct * 0.8)
-        self.pwr_val.setText(f"{est_pwr:.2f} W")
-        self.pwr_bar.set_value(est_pwr)
-        self.volt_val.setText("1.125 V")
-        self.volt_bar.set_value(1.125)
+        # 실시간 커널 RAPL CPU Package Power (W)
+        pwr_w = float(cpu_data.get('power_w', 28.0 + (tot_pct * 0.8)))
+        self.pwr_val.setText(f"{pwr_w:.2f} W")
+        self.pwr_bar.set_value(pwr_w)
+
+        # 실시간 it8686 Vcore 전압 (V)
+        vcore_v = float(cpu_data.get('vcore_v', 1.080))
+        self.volt_val.setText(f"{vcore_v:.3f} V")
+        self.volt_bar.set_value(vcore_v)

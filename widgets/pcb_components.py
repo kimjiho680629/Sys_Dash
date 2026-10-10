@@ -18,7 +18,7 @@ class CpuSocketBadge(QWidget):
     """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.temp_c = 44
+        self.temp_c = 44.0
         self.pulse_phase = 0.0
         self.setFixedSize(96, 96)
 
@@ -32,7 +32,7 @@ class CpuSocketBadge(QWidget):
         self.update()
 
     def set_temp(self, temp):
-        self.temp_c = int(round(temp))
+        self.temp_c = float(temp)
         self.update()
 
     def paintEvent(self, event):
@@ -93,7 +93,7 @@ class CpuSocketBadge(QWidget):
         # 4. 중앙 대형 흰색 온도 숫자
         painter.setFont(get_font_bold(22))
         painter.setPen(QPen(Qt.GlobalColor.white))
-        painter.drawText(core_rect, Qt.AlignmentFlag.AlignCenter, str(self.temp_c))
+        painter.drawText(core_rect, Qt.AlignmentFlag.AlignCenter, str(int(round(self.temp_c))))
 
 
 class GpuCardBadge(QWidget):

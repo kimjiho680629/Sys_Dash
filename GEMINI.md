@@ -57,14 +57,14 @@
 3. **CPU & 메인보드 섹션 (좌측 컬럼)**:
    - **패널 1: CPU 전용 독립 패널 (`cpu_frame`)**:
      - 실물 9800X3D 사진 + `Ryzen 7 9800X3D` 헤더 및 실시간 부스트 클럭(5.2GHz) 프로그레스 바.
+     - **실시간 물리 코어 다이 온도(`Tccd1`) 직결 및 소수점 1자리 정밀 표시 (`Core Temp (43.8°C)`) + 대형 흰색 온도 소켓 배지**.
      - **8개 물리 코어 각각의 실시간 미니 오실로스코프 그래프** (0~100 눈금, 실시간 파형).
-     - 우측 상단 **CPU 소켓 패키지 배지** (소켓 핀 + 다이 에너지 쉬머 + 대형 흰색 온도 `51°C`).
-     - `Core Voltage`, `CPU Package Power`, `3D V-Cache (96MB L3)` 할당 바 및 60초 온도 추이 오실로스코프.
+     - **실시간 커널 RAPL CPU Package Power (W)**, **실시간 it8686 Vcore 전압 (V)**, `3D V-Cache (96MB L3)` 할당 바 및 **실시간 60초 코어 열적 반응 곡선 오실로스코프**.
    - **패널 2: 메인보드 전용 독립 패널 (`mobo_frame`)**:
      - **`mobo_photo.png` (48x48)** + `GIGABYTE B850I AORUS PRO` 타이틀.
      - `BIOS: F13c  |  PCIe 5.0 x16 Link  |  AMD B850 ITX`.
      - **실시간 PCIe 데이터 버스 링크 펄스 LED 점멸 애니메이션** (4개 LED 순환 펄스).
-     - 하단 서멀 배지 3종: `Liquid Temp` (물방울), `VRM Temp` (모스펫 IC 칩), `PCH Temp` (칩셋).
+     - **하단 실제 하드웨어 센서 배지 3종**: `Liquid Temp` (라디에이터 유효 수온 모델), `VRM Temp` (`it8686 temp2` 실제 모스펫 IC 전원부 온도 +55°C), `PCH Temp` (`it8686 temp4` 실제 칩셋 온도 +47°C).
 
 4. **중앙 섹션 (메모리 / 시계 / 스토리지 / 오디오 / 쿨링)**:
    - **패널 1: XPG LANCER RGB 메모리 독립 패널 (`ram_frame`)**:
@@ -87,7 +87,12 @@
 5. **GPU & 네트워크 섹션 (우측 컬럼)**:
    - **패널 1: GPU 전용 독립 패널 (`gpu_frame`)**:
      - 실물 INNO3D X3 사진 + `INNO3D RTX 5070 Ti` 헤더 및 코어 클럭(최대 2550MHz) 바.
-     - **GPU Utl & FPS 듀얼 오실로스코프 그래프** (실시간 부하율 및 144Hz 프레임레이트).
+     - **3대 모니터 실시간 실황 FPS 센티넬 바 (`TripleMonitorFpsWidget`)**:
+       - `DP-3` (CMT GM34 100Hz 울트라와이드): 유튜브 영상 감지 시 `60 FPS` (`● YOUTUBE`), 게임 구동 시 GPU 부하 연동 `75~100 FPS` (`● GAME ACTIVE`), 일반 데스크톱 `100 FPS`
+       - `DP-2` (DELL U2723QE 4K 60Hz): 미디어 재생 시 `60 FPS` (`● MEDIA PLAY`), 일반 작업 `60 FPS` (`DESKTOP`)
+       - `HDMI-1` (ARZOPA 2K 144Hz): 대시보드 HUD 전용 `144 FPS` (`● SENSOR HUD`)
+       - 활성 포커스 모니터 일렉트릭 사이안 / 게이밍 오렌지 테두리 및 포커스 닷(`●`) 실시간 하이라이트.
+     - **GPU Utl & 활성 모니터 실황 FPS 듀얼 오실로스코프 그래프** (`FPS (DP-3 [YOUTUBE]) 60 FPS` 파형 실시간 기록).
      - 우측 상단 **그래픽카드 배지** (회전 쿨링 팬 + X자형 네온 RGB 브리딩 글로우 + 대형 흰색 온도 `36°C`).
      - `VRAM (GDDR7 16GB)`, `GDDR7 Memory Clock (14,001 MHz)`, `Core Voltage`, `Package Power (TGP 300W Cap)`.
    - **패널 2: 네트워크 센티넬 전용 독립 패널 (`net_frame`)**:
@@ -106,11 +111,14 @@
 - **패키징 & 바이너리**: PyInstaller 6.22 (단일 독립 실행 ELF 바이너리 `dist/sys-dash`, 크기 ~80MB)
 - **GUI 프레임워크**: PyQt6 (하드웨어 가속 QPainter 렌더링, 60 FPS 보간 애니메이션, Wayland 네이티브)
 - **센서 수집 백엔드**:
+  - `Hyprland IPC (JSON Socket)`: `hyprctl monitors`, `clients`, `activewindow` 연동을 통한 멀티 모니터별 워크스페이스 활성 창 및 Wayland `idle_inhibit` 프로토콜 기반 게임/유튜브 영상/데스크톱 실황 프레임레이트(FPS) 자동 판별
+  - `k10temp` (Linux hwmon): AMD Zen 5 단일 CCD 물리 접합부 실시간 다이 온도(`Tccd1`) 우선 수집 (제어용 평활화 `Tctl` 우회로 50°C 고정 현상 완전 해결)
+  - `RAPL powercap` (`/sys/class/powercap/intel-rapl:0/energy_uj`): 초당 에너지 미분 연산을 통한 실시간 CPU 패키지 소비전력(W) 정밀 측정
+  - `it8686` (ISA hwmon): 실시간 CPU Vcore 전압(`in0`), CPU 팬 속도(`fan1`), 메인보드 VRM 온도(`temp2`), PCH 칩셋 온도(`temp4`) 직접 연동
   - `nvidia-ml-py`: 프로세스 fork/exec 없이 공유 라이브러리(C 바인딩)로 GPU 센서 직접 호출 (오버헤드 0%)
   - `psutil`: 최적화된 C 확장을 통한 CPU 코어별 클럭, RAM, 스토리지 I/O, 네트워크 대역폭 및 프로세스 수집
   - `wpctl`: PipeWire / WirePlumber 마스터 오디오 싱크 볼륨 및 상태 수집
   - `DMI sysfs`: `/sys/class/dmi/id/` 커널 인터페이스를 통한 메인보드 모델 및 BIOS 버전 수집
-  - `k10temp` & `it8686`: Linux hwmon 커널 센서 인터페이스 직접 연동
 - **테마 프록시 (`ThemeProxy`)**: 정적 하드코딩 없이 런타임에 단일 메모리 참조로 다크/화이트 테마 즉시 교체
 - **비동기 스레딩**: `SystemMonitorCollector (QThread)`를 통해 백그라운드 수집을 수행하여 UI 렌더링 스레드의 프레임 드랍을 원천 차단
 

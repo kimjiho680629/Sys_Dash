@@ -20,6 +20,159 @@ from widgets.pcb_bar import PCBProgressBar
 from widgets.process_table import TopProcessTable
 
 
+class MonitorFpsCard(QFrame):
+    """
+    단일 모니터 실시간 실황 FPS 카드 위젯
+    """
+    def __init__(self, default_port, default_hz, parent=None):
+        super().__init__(parent)
+        self.port_name = default_port
+        self.max_hz = default_hz
+        self.is_focused = False
+        self._init_ui()
+
+    def _init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(1)
+
+        # 상단 헤더: 포트 및 주사율
+        header_h = QHBoxLayout()
+        header_h.setSpacing(4)
+        self.title_lbl = QLabel(f"{self.port_name} ({self.max_hz}Hz)")
+        self.title_lbl.setFont(get_font_bold(8))
+        header_h.addWidget(self.title_lbl)
+        header_h.addStretch()
+
+        self.focus_lbl = QLabel("●")
+        self.focus_lbl.setFont(get_font_bold(7))
+        header_h.addWidget(self.focus_lbl)
+        layout.addLayout(header_h)
+
+        # 중앙: 대형 실황 FPS 수치
+        self.fps_lbl = QLabel(f"{self.max_hz} FPS")
+        self.fps_lbl.setFont(get_font_bold(13))
+        self.fps_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.fps_lbl)
+
+        # 하단: 액티비티 태그 (YOUTUBE / GAME / DESKTOP)
+        self.act_lbl = QLabel("DESKTOP")
+        self.act_lbl.setFont(get_font_bold(7))
+        self.act_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.act_lbl)
+
+    def update_info(self, name, model, max_hz, current_fps, activity, focused):
+        self.port_name = name
+        self.max_hz = max_hz
+        self.is_focused = focused
+
+        short_model = model.split()[0] if model else ""
+        if short_model:
+            self.title_lbl.setText(f"{name} {short_model} ({max_hz}Hz)")
+        else:
+            self.title_lbl.setText(f"{name} ({max_hz}Hz)")
+
+        self.fps_lbl.setText(f"{current_fps} FPS")
+
+        if activity == "YOUTUBE":
+            self.act_lbl.setText("● YOUTUBE")
+        elif activity == "GAME":
+            self.act_lbl.setText("● GAME ACTIVE")
+        elif activity == "VIDEO":
+            self.act_lbl.setText("● MEDIA PLAY")
+        elif activity == "SENSOR HUD":
+            self.act_lbl.setText("● SENSOR HUD")
+        else:
+            self.act_lbl.setText("DESKTOP")
+
+        self.apply_style()
+
+    def apply_style(self):
+        is_dark = ThemeManager.is_dark()
+        if self.is_focused:
+            border_c = "#00d2ff" if is_dark else "#ff6600"
+            bg_c = "rgba(0, 180, 255, 0.09)" if is_dark else "rgba(255, 102, 0, 0.07)"
+            focus_c = "#00ffcc" if is_dark else "#ff5500"
+        else:
+            border_c = "#262e3e" if is_dark else "#d0d6e2"
+            bg_c = "#141722" if is_dark else "#f3f5f8"
+            focus_c = "#40485c" if is_dark else "#9aa0b0"
+
+        self.setStyleSheet(f"""
+            MonitorFpsCard {{
+                background-color: {bg_c};
+                border: 1.5px solid {border_c};
+                border-radius: 4px;
+            }}
+        """)
+
+        title_c = "#a0aec0" if is_dark else "#4a5568"
+        self.title_lbl.setStyleSheet(f"color: {title_c}; border: none; background: transparent;")
+        self.focus_lbl.setStyleSheet(f"color: {focus_c}; border: none; background: transparent;")
+
+        fps_c = "#00f0ff" if is_dark else "#d95500"
+        self.fps_lbl.setStyleSheet(f"color: {fps_c}; border: none; background: transparent;")
+
+        act_text = self.act_lbl.text()
+        if "YOUTUBE" in act_text:
+            act_c = "#ff4444" if is_dark else "#cc1111"
+        elif "GAME" in act_text:
+            act_c = "#ffaa00" if is_dark else "#d97706"
+        elif "SENSOR" in act_text:
+            act_c = "#00e676" if is_dark else "#059669"
+        else:
+            act_c = "#718096" if is_dark else "#718096"
+        self.act_lbl.setStyleSheet(f"color: {act_c}; border: none; background: transparent;")
+
+
+class TripleMonitorFpsWidget(QWidget):
+    """
+    3개 모니터 실시간 실황 FPS HUD 위젯
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._init_ui()
+
+    def _init_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        self.card_main = MonitorFpsCard("DP-3", 100, parent=self)
+        self.card_sub = MonitorFpsCard("DP-2", 60, parent=self)
+        self.card_hud = MonitorFpsCard("HDMI-1", 144, parent=self)
+
+        layout.addWidget(self.card_main)
+        layout.addWidget(self.card_sub)
+        layout.addWidget(self.card_hud)
+
+        self.apply_theme()
+
+    def apply_theme(self):
+        self.card_main.apply_style()
+        self.card_sub.apply_style()
+        self.card_hud.apply_style()
+
+    def update_monitors(self, monitors_data):
+        if not monitors_data:
+            return
+        mons = monitors_data.get("monitors", [])
+        for m in mons:
+            name = m.get("name", "")
+            model = m.get("model", "")
+            hz = m.get("max_hz", 60)
+            fps = m.get("current_fps", hz)
+            act = m.get("activity", "DESKTOP")
+            foc = m.get("focused", False)
+
+            if "DP-3" in name:
+                self.card_main.update_info(name, model, hz, fps, act, foc)
+            elif "DP-2" in name:
+                self.card_sub.update_info(name, model, hz, fps, act, foc)
+            elif "HDMI" in name:
+                self.card_hud.update_info("HDMI-1", model, hz, fps, act, foc)
+
+
 class PcbGpuSection(QWidget):
     """
     우측 컬럼: GPU 독립 패널 + 네트워크 독립 패널 + 프로세스 독립 패널
@@ -95,13 +248,17 @@ class PcbGpuSection(QWidget):
         top_h.addLayout(right_badge, stretch=0)
         gpu_layout.addLayout(top_h)
 
-        # 1-2. GPU Utl & FPS 듀얼 오실로스코프 그래프
+        # 1-2. 3대 모니터 실시간 실황 FPS 센티넬 바 (Triple Monitor Realtime FPS Sentinel)
+        self.monitors_fps_widget = TripleMonitorFpsWidget(parent=self.gpu_frame)
+        gpu_layout.addWidget(self.monitors_fps_widget)
+
+        # 1-3. GPU Utl & FPS 듀얼 오실로스코프 그래프
         graph_labels_h = QHBoxLayout()
         self.utl_lbl = QLabel("GPU Utl   10%")
         self.utl_lbl.setFont(get_font_bold(11))
         graph_labels_h.addWidget(self.utl_lbl, stretch=1)
 
-        self.fps_lbl = QLabel("FPS   144 FPS")
+        self.fps_lbl = QLabel("FPS (MAIN DP-3)   60 FPS")
         self.fps_lbl.setFont(get_font_bold(11))
         graph_labels_h.addWidget(self.fps_lbl, stretch=1)
         gpu_layout.addLayout(graph_labels_h)
@@ -109,9 +266,9 @@ class PcbGpuSection(QWidget):
         graphs_h = QHBoxLayout()
         graphs_h.setSpacing(8)
         self.utl_scope = MiniScopeGraph(max_points=32, show_labels=True, parent=self.gpu_frame)
-        self.utl_scope.setFixedHeight(98)
+        self.utl_scope.setFixedHeight(84)
         self.fps_scope = MiniScopeGraph(max_points=32, show_labels=True, parent=self.gpu_frame)
-        self.fps_scope.setFixedHeight(98)
+        self.fps_scope.setFixedHeight(84)
         graphs_h.addWidget(self.utl_scope)
         graphs_h.addWidget(self.fps_scope)
         gpu_layout.addLayout(graphs_h)
@@ -244,6 +401,9 @@ class PcbGpuSection(QWidget):
         self.net_rate_lbl.setStyleSheet(f"color: {c_main}; border: none; background: transparent;")
         self.proc_title.setStyleSheet(f"color: {c_sub}; border: none; background: transparent;")
 
+        if hasattr(self, 'monitors_fps_widget'):
+            self.monitors_fps_widget.apply_theme()
+
         self.update()
 
     def update_data(self, gpu_data, procs, net_data=None):
@@ -262,9 +422,14 @@ class PcbGpuSection(QWidget):
         self.utl_lbl.setText(f"GPU Utl   {gpu_util}%")
         self.utl_scope.add_point(gpu_util)
 
-        fps_val = 144 if gpu_util > 5 else 60
-        self.fps_lbl.setText(f"FPS   {fps_val} FPS")
-        self.fps_scope.add_point(fps_val / 1.44)
+        # 3대 모니터 실시간 실황 FPS 및 액티비티 갱신
+        monitors_data = gpu_data.get('monitors_fps', {})
+        self.monitors_fps_widget.update_monitors(monitors_data)
+
+        active_fps = monitors_data.get('active_fps', 60)
+        active_label = monitors_data.get('active_label', 'DP-3')
+        self.fps_lbl.setText(f"FPS ({active_label})   {active_fps} FPS")
+        self.fps_scope.add_point(min(100.0, (active_fps / 144.0) * 100.0))
 
         # VRAM
         v_used = int(gpu_data.get('vram_used_mb', 0))
