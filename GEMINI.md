@@ -160,9 +160,11 @@
 │   ├── pcb_bar.py              # 부드러운 스프링 보간(Lerp) 프로그레스 바
 │   ├── pcb_panels.py           # 패널 프레임 및 사선 챔퍼 시계 바
 │   └── process_table.py        # 화이트/다크 스타일 TOP 5 프로세스 테이블
+├── requirements.txt            # [신규] 필수 파이썬 패키지 목록
 ├── run_dashboard.sh            # 단일 바이너리 우선 실행 래퍼 스크립트
 ├── sys-dash.desktop            # 데스크톱 애플리케이션 런처 등록 파일
 ├── dashboard_preview.png       # 렌더링 프리뷰 스크린샷
+├── README.md                   # [신규] GitHub 공식 리포지토리 상세 설명서
 └── GEMINI.md                   # 본 문서
 ```
 
@@ -172,13 +174,19 @@
 
 ### 실행 방법
 
-1. **단일 바이너리 직접 실행 (터미널 추천)**:
+1. **단일 바이너리 직접 실행 (추천)**:
    ```bash
    ./sys-dash
    ```
 2. **래퍼 스크립트를 통한 실행**:
    ```bash
    ./run_dashboard.sh
+   ```
+3. **가상환경 소스 코드 직접 실행**:
+   ```bash
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   python3 main.py
    ```
 
 ### 단일 실행 파일 재빌드 방법
