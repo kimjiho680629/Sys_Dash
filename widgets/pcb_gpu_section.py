@@ -18,6 +18,7 @@ from widgets.pcb_components import GpuCardBadge
 from widgets.mini_scope import MiniScopeGraph
 from widgets.pcb_bar import PCBProgressBar
 from widgets.process_table import TopProcessTable
+from hardware_detector import HardwareDetector
 
 
 class MonitorFpsCard(QFrame):
@@ -157,20 +158,15 @@ class TripleMonitorFpsWidget(QWidget):
         if not monitors_data:
             return
         mons = monitors_data.get("monitors", [])
-        for m in mons:
+        cards = [self.card_main, self.card_sub, self.card_hud]
+        for idx, m in enumerate(mons[:3]):
             name = m.get("name", "")
             model = m.get("model", "")
             hz = m.get("max_hz", 60)
             fps = m.get("current_fps", hz)
             act = m.get("activity", "DESKTOP")
             foc = m.get("focused", False)
-
-            if "DP-3" in name:
-                self.card_main.update_info(name, model, hz, fps, act, foc)
-            elif "DP-2" in name:
-                self.card_sub.update_info(name, model, hz, fps, act, foc)
-            elif "HDMI" in name:
-                self.card_hud.update_info("HDMI-1", model, hz, fps, act, foc)
+            cards[idx].update_info(name, model, hz, fps, act, foc)
 
 
 class PcbGpuSection(QWidget):
@@ -215,7 +211,10 @@ class PcbGpuSection(QWidget):
             self.gpu_img_lbl.setPixmap(pix_gpu)
             title_h.addWidget(self.gpu_img_lbl)
 
-        self.gpu_title_lbl = QLabel("INNO3D RTX 5070 Ti")
+        hw_gpu = HardwareDetector.get_gpu_info()
+        hw_router = HardwareDetector.get_router_info()
+
+        self.gpu_title_lbl = QLabel(hw_gpu["model"])
         self.gpu_title_lbl.setFont(get_font_bold(17))
         title_h.addWidget(self.gpu_title_lbl)
         title_h.addStretch()
@@ -224,14 +223,14 @@ class PcbGpuSection(QWidget):
         clk_h = QHBoxLayout()
         self.clk_tag = QLabel("GPU Core Clock")
         self.clk_tag.setFont(get_font_regular(11))
-        self.clk_val = QLabel("2,550 MHz")
+        self.clk_val = QLabel(f"{int(hw_gpu['max_clock_mhz']):,} MHz")
         self.clk_val.setFont(get_font_bold(12))
         clk_h.addWidget(self.clk_tag)
         clk_h.addStretch()
         clk_h.addWidget(self.clk_val)
         left_info.addLayout(clk_h)
 
-        self.clk_bar = PCBProgressBar(max_val=3000.0, height=11, parent=self.gpu_frame)
+        self.clk_bar = PCBProgressBar(max_val=max(3000.0, hw_gpu["max_clock_mhz"] + 200), height=11, parent=self.gpu_frame)
         left_info.addWidget(self.clk_bar)
         top_h.addLayout(left_info, stretch=1)
 
@@ -288,13 +287,13 @@ class PcbGpuSection(QWidget):
             bar = PCBProgressBar(max_val=max_v, height=10, parent=self.gpu_frame)
             gpu_layout.addWidget(bar)
             self.meter_labels.append((tag, val))
-            return val, bar
+            return tag, val, bar
 
-        self.vram_val, self.vram_bar = add_meter_row("VRAM (GDDR7 16GB)", "1,640 MB (10.2%)", 100.0)
-        self.mem_clk_val, self.mem_clk_bar = add_meter_row("GDDR7 Memory Clock", "14,001 MHz", 16000.0)
+        self.vram_tag, self.vram_val, self.vram_bar = add_meter_row(hw_gpu["vram_label"], "1,640 MB (10.2%)", 100.0)
+        self.mem_clk_tag, self.mem_clk_val, self.mem_clk_bar = add_meter_row("GDDR7 Memory Clock", "14,001 MHz", 16000.0)
         self.mem_clk_bar.set_value(14001.0)
-        self.volt_val, self.volt_bar = add_meter_row("Core Voltage", "0.850 V", 1.20)
-        self.pwr_val, self.pwr_bar = add_meter_row("Package Power (TGP)", "38.10 W | 13%", 300.0)
+        self.volt_tag, self.volt_val, self.volt_bar = add_meter_row("Core Voltage", "0.850 V", 1.20)
+        self.pwr_tag, self.pwr_val, self.pwr_bar = add_meter_row("Package Power (TGP)", "38.10 W | 13%", hw_gpu["tgp_w"])
 
         main_layout.addWidget(self.gpu_frame, stretch=6)
 
@@ -321,7 +320,7 @@ class PcbGpuSection(QWidget):
 
         net_texts = QVBoxLayout()
         net_texts.setSpacing(2)
-        self.net_title_lbl = QLabel("ASUS ROG GT-AX11000")
+        self.net_title_lbl = QLabel(hw_router)
         self.net_title_lbl.setFont(get_font_bold(13))
         self.net_sub_lbl = QLabel("wlp8s0  |  IP: 192.168.50.206")
         self.net_sub_lbl.setFont(get_font_regular(10))
@@ -407,6 +406,15 @@ class PcbGpuSection(QWidget):
         self.update()
 
     def update_data(self, gpu_data, procs, net_data=None):
+        # GPU 모델명 및 VRAM 라벨 동적 갱신
+        gpu_model = gpu_data.get("model")
+        if gpu_model and self.gpu_title_lbl.text() != gpu_model:
+            self.gpu_title_lbl.setText(gpu_model)
+
+        vram_label = gpu_data.get("vram_label")
+        if vram_label and self.vram_tag.text() != vram_label:
+            self.vram_tag.setText(vram_label)
+
         temp = gpu_data.get('temp_c', 35)
         self.gpu_badge.set_temp(temp)
 
@@ -427,7 +435,7 @@ class PcbGpuSection(QWidget):
         self.monitors_fps_widget.update_monitors(monitors_data)
 
         active_fps = monitors_data.get('active_fps', 60)
-        active_label = monitors_data.get('active_label', 'DP-3')
+        active_label = monitors_data.get('active_label', 'MAIN')
         self.fps_lbl.setText(f"FPS ({active_label})   {active_fps} FPS")
         self.fps_scope.add_point(min(100.0, (active_fps / 144.0) * 100.0))
 
@@ -440,6 +448,7 @@ class PcbGpuSection(QWidget):
         # Power
         pwr = gpu_data.get('power_w', 0.0)
         limit = gpu_data.get('power_limit_w', 300.0)
+        self.pwr_bar.max_val = limit
         pct = (pwr / limit) * 100.0 if limit > 0 else 0
         self.pwr_val.setText(f"{pwr:.1f} W | {int(round(pct))}%")
         self.pwr_bar.set_value(pwr)
@@ -449,6 +458,9 @@ class PcbGpuSection(QWidget):
 
         # 네트워크 모듈 갱신
         if net_data:
+            router = net_data.get("router_model")
+            if router and self.net_title_lbl.text() != router:
+                self.net_title_lbl.setText(router)
             iface = net_data.get("iface", "wlp8s0")
             ip = net_data.get("ip", "192.168.50.206")
             down_mb = net_data.get("down_mb_s", 0.0)

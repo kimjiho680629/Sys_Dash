@@ -13,6 +13,8 @@ a = Analysis(
     hiddenimports=[
         'pynvml',
         'psutil',
+        'hardware_detector',
+        'config',
         'PyQt6.QtCore',
         'PyQt6.QtGui',
         'PyQt6.QtWidgets',

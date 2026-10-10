@@ -119,8 +119,11 @@
   - `psutil`: 최적화된 C 확장을 통한 CPU 코어별 클럭, RAM, 스토리지 I/O, 네트워크 대역폭 및 프로세스 수집
   - `wpctl`: PipeWire / WirePlumber 마스터 오디오 싱크 볼륨 및 상태 수집
   - `DMI sysfs`: `/sys/class/dmi/id/` 커널 인터페이스를 통한 메인보드 모델 및 BIOS 버전 수집
+  - **하이브리드 하드웨어 자동 감지 (`HardwareDetector`)**: 커널 procfs(/proc/cpuinfo), sysfs cpufreq/cache, DMI, NVML, psutil, PipeWire를 통합하여 다른 시스템(인텔, AMD, 다양한 그래픽카드/보드/SSD/오디오)에서도 시스템 스펙(코어 수, 부스트 클럭, 캐시 용량, TGP, 보드명, 메모리, NVMe 모델, 오디오 싱크 등)을 지능적으로 100% 자동 인식.
+  - **사용자 커스텀 오버라이드 (`HardwareConfig`)**: `config.py`의 `HardwareConfig`를 통해 원하는 브랜드명이나 스펙 라벨을 손쉽게 덮어쓰기 지원.
 - **테마 프록시 (`ThemeProxy`)**: 정적 하드코딩 없이 런타임에 단일 메모리 참조로 다크/화이트 테마 즉시 교체
 - **비동기 스레딩**: `SystemMonitorCollector (QThread)`를 통해 백그라운드 수집을 수행하여 UI 렌더링 스레드의 프레임 드랍을 원천 차단
+- **GitHub 원격 저장소**: [https://github.com/kimjiho680629/Sys_Dash](https://github.com/kimjiho680629/Sys_Dash)
 
 ---
 
@@ -143,15 +146,16 @@
 ├── build_executable.sh         # 원클릭 독립 실행 파일 빌드 스크립트
 ├── sys_dash.spec               # PyInstaller 빌드 명세 파일
 ├── main.py                     # 메인 윈도우 및 3단 PCB 레이아웃
-├── config.py                   # 사용자 설정 및 DEFAULT_THEME 정의
+├── config.py                   # 사용자 설정, DEFAULT_THEME 및 [HardwareConfig] 스펙 정의
+├── hardware_detector.py        # [신규] 시스템 하드웨어 커널/DMI/NVML 자동 감지 엔진
 ├── monitor_collector.py        # 센서 비동기 수집 스레드 (NVML, psutil, PipeWire, DMI)
 ├── theme.py                    # 화이트/다크 테마, ThemeManager, PCB 전류 펄스 렌더러
 ├── widgets/
 │   ├── __init__.py
 │   ├── pcb_components.py       # CPU 소켓, GPU 카드, XPG 오로라 RAM, 메인보드 배지, 오디오 VU 미터
-│   ├── pcb_cpu_section.py      # 좌측: CPU 9800X3D 독립 패널 + B850I AORUS 메인보드 독립 패널
-│   ├── pcb_center_section.py   # 중앙: XPG RAM 패널 + 시계 바 + SSD/팬 패널 + 사운드 VU 패널
-│   ├── pcb_gpu_section.py      # 우측: RTX 5070 Ti 패널 + 네트워크 센티넬 패널 + 프로세스 패널
+│   ├── pcb_cpu_section.py      # 좌측: CPU 가변 코어 독립 패널 + B850I AORUS 메인보드 독립 패널
+│   ├── pcb_center_section.py   # 중앙: RAM 패널 + 시계 바 + SSD/팬 패널 + 사운드 VU 패널
+│   ├── pcb_gpu_section.py      # 우측: GPU 패널 + 3모니터 FPS 센티넬 바 + 네트워크 패널 + 프로세스 패널
 │   ├── mini_scope.py           # 0~100 눈금 미니 오실로스코프 파형 그래프 (다크 네온 채움 지원)
 │   ├── pcb_bar.py              # 부드러운 스프링 보간(Lerp) 프로그레스 바
 │   ├── pcb_panels.py           # 패널 프레임 및 사선 챔퍼 시계 바

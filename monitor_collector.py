@@ -10,6 +10,7 @@ import socket
 import json
 import psutil
 from PyQt6.QtCore import QThread, pyqtSignal
+from hardware_detector import HardwareDetector
 
 # NVML (NVIDIA Management Library) import
 try:
@@ -52,8 +53,12 @@ class SystemMonitorCollector(QThread):
         self.it8686_hwmon_path = None
         self._init_it8686_path()
 
-        # 메인보드 고정 정보 1회 캐싱
-        self.cached_mobo = self._init_motherboard_info()
+        # 하드웨어 자동 감지 프로필 초기화 (CPU, 메인보드, RAM, SSD, 라우터)
+        self.hw_cpu = HardwareDetector.get_cpu_info()
+        self.cached_mobo = HardwareDetector.get_motherboard_info()
+        self.hw_ram = HardwareDetector.get_ram_info()
+        self.hw_ssd = HardwareDetector.get_ssd_info()
+        self.hw_router = HardwareDetector.get_router_info()
         self.cached_net_iface = self._init_network_iface()
 
     def _init_rapl(self):
@@ -245,9 +250,12 @@ class SystemMonitorCollector(QThread):
             pkg_power_w = 28.0 + (total_percent * 0.8)
 
         return {
-            "model": "AMD Ryzen 7 9800X3D",
-            "cores": 8,
-            "threads": 16,
+            "model": self.hw_cpu["model"],
+            "cores": self.hw_cpu["physical_cores"],
+            "threads": self.hw_cpu["logical_threads"],
+            "max_clock_mhz": self.hw_cpu["max_clock_mhz"],
+            "tdp_w": self.hw_cpu["tdp_w"],
+            "cache_label": self.hw_cpu["cache_label"],
             "total_percent": total_percent,
             "threads_percent": per_cpu_percent,
             "threads_freq": per_cpu_freq,
@@ -261,18 +269,22 @@ class SystemMonitorCollector(QThread):
 
     def _collect_gpu(self):
         if not self.nvml_initialized or not self.gpu_handle:
+            hw_gpu = HardwareDetector.get_gpu_info(self.gpu_name, 300.0, 16384.0)
             return {
-                "model": "NVIDIA GeForce RTX 5070 Ti",
+                "model": hw_gpu["model"],
+                "vram_label": hw_gpu["vram_label"],
+                "max_clock_mhz": hw_gpu["max_clock_mhz"],
                 "util_percent": 0,
                 "temp_c": 0,
                 "power_w": 0.0,
-                "power_limit_w": 300.0,
+                "power_limit_w": hw_gpu["tgp_w"],
                 "clock_core_mhz": 0,
                 "clock_mem_mhz": 0,
                 "vram_used_mb": 0,
                 "vram_total_mb": 16303,
                 "vram_percent": 0.0,
-                "fan_percent": 0
+                "fan_percent": 0,
+                "monitors_fps": self._collect_monitors_fps(0)
             }
 
         try:
@@ -296,13 +308,16 @@ class SystemMonitorCollector(QThread):
                 fan_p = 0
 
             monitors_fps = self._collect_monitors_fps(util.gpu)
+            hw_gpu = HardwareDetector.get_gpu_info(self.gpu_name, power_limit_w, mem.total / (1024 * 1024))
 
             return {
-                "model": self.gpu_name,
+                "model": hw_gpu["model"],
+                "vram_label": hw_gpu["vram_label"],
+                "max_clock_mhz": hw_gpu["max_clock_mhz"],
                 "util_percent": util.gpu,
                 "temp_c": temp,
                 "power_w": power_mw / 1000.0,
-                "power_limit_w": power_limit_w,
+                "power_limit_w": hw_gpu["tgp_w"],
                 "clock_core_mhz": core_clock,
                 "clock_mem_mhz": mem_clock,
                 "vram_used_mb": mem.used / (1024 * 1024),
@@ -313,12 +328,15 @@ class SystemMonitorCollector(QThread):
             }
         except Exception as e:
             monitors_fps = self._collect_monitors_fps(0)
+            hw_gpu = HardwareDetector.get_gpu_info(self.gpu_name, 300.0, 16384.0)
             return {
-                "model": self.gpu_name,
+                "model": hw_gpu["model"],
+                "vram_label": hw_gpu["vram_label"],
+                "max_clock_mhz": hw_gpu["max_clock_mhz"],
                 "util_percent": 0,
                 "temp_c": 0,
                 "power_w": 0.0,
-                "power_limit_w": 300.0,
+                "power_limit_w": hw_gpu["tgp_w"],
                 "clock_core_mhz": 0,
                 "clock_mem_mhz": 0,
                 "vram_used_mb": 0,
@@ -443,7 +461,10 @@ class SystemMonitorCollector(QThread):
     def _collect_memory(self):
         vm = psutil.virtual_memory()
         swap = psutil.swap_memory()
+        ram_info = HardwareDetector.get_ram_info()
         return {
+            "model": ram_info["model"],
+            "spec": ram_info["spec"],
             "total_gb": vm.total / (1024**3),
             "used_gb": vm.used / (1024**3),
             "free_gb": vm.available / (1024**3),
@@ -471,7 +492,10 @@ class SystemMonitorCollector(QThread):
         except Exception:
             pass
 
+        ssd_info = HardwareDetector.get_ssd_info()
         return {
+            "model": ssd_info["model"],
+            "spec": ssd_info["spec"],
             "total_gb": root_usage.total / (1024**3),
             "used_gb": root_usage.used / (1024**3),
             "percent": root_usage.percent,
@@ -490,6 +514,7 @@ class SystemMonitorCollector(QThread):
         self.last_net_io = current_net
 
         return {
+            "router_model": self.hw_router,
             "down_mb_s": down_bytes_sec / (1024 * 1024),
             "up_mb_s": up_bytes_sec / (1024 * 1024),
             "down_kb_s": down_bytes_sec / 1024,
@@ -521,9 +546,10 @@ class SystemMonitorCollector(QThread):
         return mobo
 
     def _collect_audio(self):
+        audio_info = HardwareDetector.get_audio_info()
         volume_pct = 30
         is_muted = False
-        device_name = "USB Audio Speakers"
+        device_name = audio_info["device"]
 
         try:
             res = subprocess.run(
@@ -543,6 +569,7 @@ class SystemMonitorCollector(QThread):
             pass
 
         return {
+            "title": audio_info["title"],
             "device": device_name,
             "volume_percent": volume_pct,
             "muted": is_muted

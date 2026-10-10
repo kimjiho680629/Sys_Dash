@@ -16,6 +16,7 @@ from config import get_resource_path
 from widgets.pcb_components import CpuSocketBadge, LiquidDropBadge, VrmChipBadge
 from widgets.mini_scope import MiniScopeGraph
 from widgets.pcb_bar import PCBProgressBar
+from hardware_detector import HardwareDetector
 
 
 class PcbCpuSection(QWidget):
@@ -60,7 +61,10 @@ class PcbCpuSection(QWidget):
             self.cpu_img_lbl.setPixmap(pix)
             title_h.addWidget(self.cpu_img_lbl)
 
-        self.cpu_title_lbl = QLabel("Ryzen 7 9800X3D")
+        hw_cpu = HardwareDetector.get_cpu_info()
+        hw_mobo = HardwareDetector.get_motherboard_info()
+
+        self.cpu_title_lbl = QLabel(hw_cpu["model"])
         self.cpu_title_lbl.setFont(get_font_bold(17))
         title_h.addWidget(self.cpu_title_lbl)
         title_h.addStretch()
@@ -69,14 +73,14 @@ class PcbCpuSection(QWidget):
         clk_h = QHBoxLayout()
         self.clk_tag = QLabel("CPU Boost Clock")
         self.clk_tag.setFont(get_font_regular(11))
-        self.clk_val = QLabel("5,200 MHz")
+        self.clk_val = QLabel(f"{int(hw_cpu['max_clock_mhz']):,} MHz")
         self.clk_val.setFont(get_font_bold(12))
         clk_h.addWidget(self.clk_tag)
         clk_h.addStretch()
         clk_h.addWidget(self.clk_val)
         left_info.addLayout(clk_h)
 
-        self.clk_bar = PCBProgressBar(max_val=5500.0, height=11, parent=self.cpu_frame)
+        self.clk_bar = PCBProgressBar(max_val=max(5500.0, hw_cpu["max_clock_mhz"] + 200), height=11, parent=self.cpu_frame)
         left_info.addWidget(self.clk_bar)
         top_h.addLayout(left_info, stretch=1)
 
@@ -93,7 +97,7 @@ class PcbCpuSection(QWidget):
         top_h.addLayout(right_badge, stretch=0)
         cpu_layout.addLayout(top_h)
 
-        # 1-2. 코어별 8개 오실로스코프 그래프
+        # 1-2. 코어별 오실로스코프 그래프 (시스템 물리 코어 수 자동 반영)
         util_h = QHBoxLayout()
         self.util_tag = QLabel("CPU Utilization (Per-Core)")
         self.util_tag.setFont(get_font_regular(11))
@@ -107,14 +111,15 @@ class PcbCpuSection(QWidget):
         cores_layout = QHBoxLayout()
         cores_layout.setSpacing(4)
         self.core_scopes = []
-        for i in range(8):
-            scope = MiniScopeGraph(max_points=24, show_labels=(i == 0 or i == 7), parent=self.cpu_frame)
+        num_cores = min(16, max(4, hw_cpu["physical_cores"]))
+        for i in range(num_cores):
+            scope = MiniScopeGraph(max_points=24, show_labels=(i == 0 or i == num_cores - 1), parent=self.cpu_frame)
             scope.setFixedHeight(98)
             self.core_scopes.append(scope)
             cores_layout.addWidget(scope)
         cpu_layout.addLayout(cores_layout)
 
-        # 1-3. 전압, 전력, 3D V-Cache 바 게이지
+        # 1-3. 전압, 전력, L3/V-Cache 바 게이지
         def add_meter_row(label_text, default_val_str, max_v):
             h_box = QHBoxLayout()
             tag = QLabel(label_text)
@@ -129,11 +134,11 @@ class PcbCpuSection(QWidget):
             bar = PCBProgressBar(max_val=max_v, height=10, parent=self.cpu_frame)
             cpu_layout.addWidget(bar)
             self.meter_labels.append((tag, val))
-            return val, bar
+            return tag, val, bar
 
-        self.volt_val, self.volt_bar = add_meter_row("Core Voltage", "1.150 V", 1.50)
-        self.pwr_val, self.pwr_bar = add_meter_row("CPU Package Power", "38.50 W", 140.0)
-        self.cache_val, self.cache_bar = add_meter_row("3D V-Cache (96MB L3)", "96 MB ALLOCATED (OPTIMAL)", 100.0)
+        self.volt_tag, self.volt_val, self.volt_bar = add_meter_row("Core Voltage", "1.150 V", 1.50)
+        self.pwr_tag, self.pwr_val, self.pwr_bar = add_meter_row("CPU Package Power", "38.50 W", hw_cpu["tdp_w"])
+        self.cache_tag, self.cache_val, self.cache_bar = add_meter_row(hw_cpu["cache_label"], "ALLOCATED (OPTIMAL)", 100.0)
         self.cache_bar.set_value(100.0)
 
         # 1-4. CPU 온도 추이 그래프
@@ -170,9 +175,9 @@ class PcbCpuSection(QWidget):
 
         mobo_texts = QVBoxLayout()
         mobo_texts.setSpacing(2)
-        self.mobo_title_lbl = QLabel("GIGABYTE B850I AORUS PRO")
+        self.mobo_title_lbl = QLabel(hw_mobo["full_name"])
         self.mobo_title_lbl.setFont(get_font_bold(14))
-        self.mobo_sub_lbl = QLabel("BIOS: F13c  |  PCIe 5.0 x16 Link  |  AMD B850 ITX")
+        self.mobo_sub_lbl = QLabel(hw_mobo["sub_text"])
         self.mobo_sub_lbl.setFont(get_font_regular(10))
         mobo_texts.addWidget(self.mobo_title_lbl)
         mobo_texts.addWidget(self.mobo_sub_lbl)
@@ -292,18 +297,25 @@ class PcbCpuSection(QWidget):
 
     def update_data(self, cpu_data, mobo_data=None):
         if mobo_data:
-            vendor = mobo_data.get("vendor", "GIGABYTE")
-            board = mobo_data.get("board_name", "B850I AORUS PRO")
-            bios = mobo_data.get("bios_ver", "F13c")
-            chipset = mobo_data.get("chipset", "AMD B850")
-            self.mobo_title_lbl.setText(f"{vendor} {board}")
-            self.mobo_sub_lbl.setText(f"BIOS: {bios}  |  PCIe 5.0 x16 Link  |  {chipset} ITX")
+            full_name = mobo_data.get("full_name") or f"{mobo_data.get('vendor', '')} {mobo_data.get('board_name', '')}".strip()
+            sub_text = mobo_data.get("sub_text") or f"BIOS: {mobo_data.get('bios_ver', '')}  |  PCIe Link Active"
+            self.mobo_title_lbl.setText(full_name)
+            self.mobo_sub_lbl.setText(sub_text)
 
             # 실제 메인보드 센서(it8686) 온도 반영
             vrm_t = mobo_data.get("vrm_temp", 55.0)
             pch_t = mobo_data.get("pch_temp", 47.0)
             self.vrm_badge.set_temp(int(round(vrm_t)))
             self.pch_badge.set_temp(int(round(pch_t)))
+
+        # CPU 모델명 및 캐시 라벨 동적 갱신
+        cpu_model = cpu_data.get("model")
+        if cpu_model and self.cpu_title_lbl.text() != cpu_model:
+            self.cpu_title_lbl.setText(cpu_model)
+
+        cache_label = cpu_data.get("cache_label")
+        if cache_label and self.cache_tag.text() != cache_label:
+            self.cache_tag.setText(cache_label)
 
         temp = float(cpu_data.get('temp_c', 43.0))
         self.cpu_badge.set_temp(temp)
@@ -324,8 +336,9 @@ class PcbCpuSection(QWidget):
         self.clk_bar.set_value(max_f)
 
         threads_pct = cpu_data.get('threads_percent', [])
-        for i in range(8):
-            t_idx = i * 2
+        num_scopes = len(self.core_scopes)
+        for i in range(num_scopes):
+            t_idx = i * 2 if len(threads_pct) >= num_scopes * 2 else i
             p = threads_pct[t_idx] if t_idx < len(threads_pct) else 0.0
             self.core_scopes[i].add_point(p)
 

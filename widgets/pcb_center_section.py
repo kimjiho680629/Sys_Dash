@@ -18,6 +18,7 @@ from widgets.pcb_components import XpgLancerBadge, TridentZBadge, AudioVuVisuali
 from widgets.pcb_bar import PCBProgressBar
 from widgets.pcb_panels import ClockLogoBar
 from widgets.mini_scope import MiniScopeGraph
+from hardware_detector import HardwareDetector
 
 
 class FanSpinBadge(QWidget):
@@ -95,7 +96,11 @@ class PcbCenterSection(QWidget):
             self.ram_img_lbl.setPixmap(pix)
             ram_title_h.addWidget(self.ram_img_lbl)
 
-        self.ram_title = QLabel("XPG LANCER RGB (DDR5 64GB)")
+        hw_ram = HardwareDetector.get_ram_info()
+        hw_ssd = HardwareDetector.get_ssd_info()
+        hw_audio = HardwareDetector.get_audio_info()
+
+        self.ram_title = QLabel(hw_ram["model"])
         self.ram_title.setFont(get_font_bold(15))
         ram_title_h.addWidget(self.ram_title)
         ram_title_h.addStretch()
@@ -171,7 +176,7 @@ class PcbCenterSection(QWidget):
             self.ssd_img_lbl.setPixmap(pix_ssd)
             ssd_title_h.addWidget(self.ssd_img_lbl)
 
-        self.ssd_tag = QLabel("Samsung 980 Pro (PCIe 4.0 NVMe)")
+        self.ssd_tag = QLabel(hw_ssd["model"])
         self.ssd_tag.setFont(get_font_bold(13))
         ssd_title_h.addWidget(self.ssd_tag)
         ssd_title_h.addStretch()
@@ -237,9 +242,9 @@ class PcbCenterSection(QWidget):
 
         audio_texts = QVBoxLayout()
         audio_texts.setSpacing(2)
-        self.audio_title_lbl = QLabel("PipeWire Master Audio")
+        self.audio_title_lbl = QLabel(hw_audio["title"])
         self.audio_title_lbl.setFont(get_font_bold(13))
-        self.audio_dev_lbl = QLabel("USB Audio Speakers")
+        self.audio_dev_lbl = QLabel(hw_audio["device"])
         self.audio_dev_lbl.setFont(get_font_regular(10))
         audio_texts.addWidget(self.audio_title_lbl)
         audio_texts.addWidget(self.audio_dev_lbl)
@@ -304,13 +309,21 @@ class PcbCenterSection(QWidget):
         self.update()
 
     def update_data(self, mem_data, disk_data, cpu_fan, gpu_fan, audio_data=None):
-        # 램
+        # 램 모델 및 사용량
+        ram_model = mem_data.get('model')
+        if ram_model and self.ram_title.text() != ram_model:
+            self.ram_title.setText(ram_model)
+
         used_mb = int(mem_data['used_gb'] * 1024)
         pct = mem_data['percent']
         self.mem_val_lbl.setText(f"{used_mb:,} MB ({pct:.1f}%)")
         self.mem_bar.set_value(pct)
 
-        # SSD
+        # SSD 모델 및 사용량
+        ssd_model = disk_data.get('model')
+        if ssd_model and self.ssd_tag.text() != ssd_model:
+            self.ssd_tag.setText(ssd_model)
+
         disk_used = int(disk_data['used_gb'])
         disk_total = int(disk_data['total_gb'])
         self.ssd_val_lbl.setText(f"{disk_used} GB / {disk_total} GB")
@@ -324,10 +337,14 @@ class PcbCenterSection(QWidget):
 
         # 오디오
         if audio_data:
+            title = audio_data.get("title")
+            if title and self.audio_title_lbl.text() != title:
+                self.audio_title_lbl.setText(title)
             dev = audio_data.get("device", "USB Audio Speakers")
+            if dev and self.audio_dev_lbl.text() != dev:
+                self.audio_dev_lbl.setText(dev)
             vol = audio_data.get("volume_percent", 30)
             muted = audio_data.get("muted", False)
-            self.audio_dev_lbl.setText(dev)
             if muted:
                 self.audio_vol_lbl.setText("MUTED")
                 self.audio_vol_lbl.setStyleSheet("color: #ff3c50; border: none; background: transparent;")
