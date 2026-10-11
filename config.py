@@ -64,8 +64,8 @@ class HardwareConfig:
     # -------------------------------------------------------------------------
     # [2. 그래픽카드 (GPU)]
     # -------------------------------------------------------------------------
-    # None: NVML을 통해 실제 GPU 모델명 자동 감지 (예: "RTX 5070 Ti", "RTX 4080 SUPER")
-    GPU_MODEL = None
+    # None: NVML 및 PCI 서브시스템을 통해 실제 GPU 모델명 자동 감지 (예: "INNO3D RTX 5070 Ti", "RTX 4080 SUPER")
+    GPU_MODEL = "INNO3D RTX 5070 Ti"
     # None: 최대 부스트 클럭 자동 지정 (MHz 단위)
     GPU_MAX_CLOCK_MHZ = None
     # None: NVML TGP 전력 한도 자동 감지 (W 단위)

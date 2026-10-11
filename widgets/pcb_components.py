@@ -32,8 +32,10 @@ class CpuSocketBadge(QWidget):
         self.update()
 
     def set_temp(self, temp):
-        self.temp_c = float(temp)
-        self.update()
+        t_val = float(temp)
+        if 10.0 <= t_val <= 115.0:
+            self.temp_c = t_val
+            self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)

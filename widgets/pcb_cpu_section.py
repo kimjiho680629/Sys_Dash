@@ -317,7 +317,12 @@ class PcbCpuSection(QWidget):
         if cache_label and self.cache_tag.text() != cache_label:
             self.cache_tag.setText(cache_label)
 
-        temp = float(cpu_data.get('temp_c', 43.0))
+        temp = float(cpu_data.get('temp_c', 45.0))
+        if temp < 10.0:
+            temp = getattr(self, '_last_valid_cpu_temp', 45.0)
+        else:
+            self._last_valid_cpu_temp = temp
+
         self.cpu_badge.set_temp(temp)
         # 상단 태그에 실시간 소수점 1자리 정밀 온도 반영
         self.temp_tag.setText(f"Core Temp ({temp:.1f}°C)")

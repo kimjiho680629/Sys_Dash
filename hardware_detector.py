@@ -141,12 +141,122 @@ class HardwareDetector:
         }
 
     @staticmethod
-    def get_gpu_info(detected_name: str = "NVIDIA GPU", power_limit_w: float = 300.0, vram_total_mb: float = 16384.0) -> dict:
+    def get_gpu_brand() -> str:
+        """
+        PCI sysfs (/sys/bus/pci/devices/*/subsystem_vendor) 및 lspci를 통해
+        실제 그래픽카드 제조사 브랜드(INNO3D, ASUS, MSI, GIGABYTE, ZOTAC 등) 자동 감지
+        """
+        vendor_map = {
+            '0x1771': 'INNO3D',
+            '0x1043': 'ASUS',
+            '0x1462': 'MSI',
+            '0x1458': 'GIGABYTE',
+            '0x19da': 'ZOTAC',
+            '0x1569': 'Palit',
+            '0x10b0': 'Gainward',
+            '0x1b4c': 'GALAX',
+            '0x196e': 'COLORFUL',
+            '0x19f1': 'PNY',
+            '0x3842': 'EVGA',
+            '0x10de': '',  # NVIDIA Founders Edition
+        }
+        try:
+            for p in glob.glob('/sys/bus/pci/devices/*/class'):
+                with open(p, 'r') as f:
+                    cls = f.read().strip()
+                if cls.startswith(('0x0300', '0x0302')):
+                    dev_dir = os.path.dirname(p)
+                    v_path = os.path.join(dev_dir, 'subsystem_vendor')
+                    if os.path.exists(v_path):
+                        with open(v_path, 'r') as vf:
+                            v_id = vf.read().strip().lower()
+                        if v_id in vendor_map:
+                            return vendor_map[v_id]
+        except Exception:
+            pass
+
+        # 2차: lspci Subsystem 파싱
+        try:
+            res = subprocess.run(['lspci', '-v'], capture_output=True, text=True, timeout=0.2)
+            if res.returncode == 0:
+                for line in res.stdout.splitlines():
+                    if 'Subsystem:' in line:
+                        line_u = line.upper()
+                        if 'INNOVISION' in line_u or 'INNO3D' in line_u:
+                            return 'INNO3D'
+                        elif 'ASUSTEK' in line_u or 'ASUS' in line_u:
+                            return 'ASUS'
+                        elif 'MSI' in line_u or 'MICRO-STAR' in line_u:
+                            return 'MSI'
+                        elif 'GIGABYTE' in line_u:
+                            return 'GIGABYTE'
+                        elif 'ZOTAC' in line_u:
+                            return 'ZOTAC'
+                        elif 'PALIT' in line_u:
+                            return 'Palit'
+                        elif 'GAINWARD' in line_u:
+                            return 'Gainward'
+                        elif 'GALAX' in line_u or 'KFA2' in line_u:
+                            return 'GALAX'
+                        elif 'COLORFUL' in line_u:
+                            return 'COLORFUL'
+                        elif 'EVGA' in line_u:
+                            return 'EVGA'
+                        elif 'PNY' in line_u:
+                            return 'PNY'
+        except Exception:
+            pass
+
+        return ''
+
+    @staticmethod
+    def get_gpu_raw_name() -> str:
+        """
+        시스템에 설치된 GPU 원본 명칭 감지 (NVML -> nvidia-smi -> lspci)
+        """
+        # 1. nvidia-smi
+        try:
+            res = subprocess.run(['nvidia-smi', '--query-gpu=gpu_name', '--format=csv,noheader'],
+                                 capture_output=True, text=True, timeout=0.2)
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip().splitlines()[0].strip()
+        except Exception:
+            pass
+
+        # 2. lspci
+        try:
+            res = subprocess.run(['lspci'], capture_output=True, text=True, timeout=0.2)
+            if res.returncode == 0:
+                for line in res.stdout.splitlines():
+                    if 'VGA' in line or '3D controller' in line:
+                        if 'NVIDIA' in line:
+                            m = re.search(r'\[(GeForce[^\]]+)\]', line)
+                            if m:
+                                return m.group(1)
+        except Exception:
+            pass
+
+        return "NVIDIA GPU"
+
+    @staticmethod
+    def get_gpu_info(detected_name: str = "", power_limit_w: float = 300.0, vram_total_mb: float = 16384.0) -> dict:
+        if not detected_name or detected_name == "NVIDIA GPU":
+            detected_name = HardwareDetector.get_gpu_raw_name()
+
         # 모델명 정제
         clean_name = detected_name
         if "NVIDIA" in clean_name and "GeForce" in clean_name:
             clean_name = clean_name.replace("NVIDIA GeForce ", "")
+        elif "GeForce " in clean_name:
+            clean_name = clean_name.replace("GeForce ", "")
         
+        # 제조사 서브시스템 브랜드 접두사 결합 (예: INNO3D + RTX 5070 Ti -> INNO3D RTX 5070 Ti)
+        brand = HardwareDetector.get_gpu_brand()
+        if brand and brand.lower() not in clean_name.lower():
+            full_model = f"{brand} {clean_name}"
+        else:
+            full_model = clean_name
+
         # VRAM 용량 라벨
         vram_gb = int(round(vram_total_mb / 1024.0)) if vram_total_mb > 0 else 16
         is_blackwell = any(k in clean_name for k in ["5090", "5080", "5070"])
@@ -162,7 +272,7 @@ class HardwareDetector:
         elif "5090" in clean_name or "4090" in clean_name:
             max_clock = 2800.0
 
-        final_model = HardwareConfig.GPU_MODEL or clean_name
+        final_model = HardwareConfig.GPU_MODEL or full_model
         final_vram_label = HardwareConfig.GPU_VRAM_LABEL or default_vram_label
         final_max_clock = HardwareConfig.GPU_MAX_CLOCK_MHZ or max_clock
         final_tgp = HardwareConfig.GPU_TGP_W or power_limit_w

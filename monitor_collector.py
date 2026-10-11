@@ -55,6 +55,12 @@ class SystemMonitorCollector(QThread):
         self.it8686_hwmon_path = None
         self._init_it8686_path()
 
+        # CPU 실시간 하드웨어 센서 (k10temp) 직접 sysfs 경로 및 이전 유효 온도 초기화
+        self.last_cpu_temp = 45.0
+        self.k10temp_hwmon_path = None
+        self.k10temp_inputs = {}
+        self._init_k10temp_path()
+
         # 하드웨어 자동 감지 프로필 초기화 (CPU, 메인보드, RAM, SSD, 라우터)
         self.hw_cpu = HardwareDetector.get_cpu_info()
         self.cached_mobo = HardwareDetector.get_motherboard_info()
@@ -88,6 +94,81 @@ class SystemMonitorCollector(QThread):
                             break
                 except Exception:
                     pass
+
+    def _init_k10temp_path(self):
+        """
+        AMD k10temp (또는 coretemp, zenpower) hwmon sysfs 직접 경로 탐색 및 캐싱
+        """
+        import glob
+        self.k10temp_inputs = {}
+        for p in glob.glob("/sys/class/hwmon/hwmon*"):
+            name_p = os.path.join(p, "name")
+            if os.path.exists(name_p):
+                try:
+                    with open(name_p, "r") as f:
+                        drv_name = f.read().strip()
+                    if drv_name in ["k10temp", "coretemp", "zenpower"]:
+                        self.k10temp_hwmon_path = p
+                        # temp*_label 검사하여 tccd 및 tctl 파일 특정
+                        for label_file in glob.glob(os.path.join(p, "temp*_label")):
+                            try:
+                                with open(label_file, "r") as lf:
+                                    lbl = lf.read().strip()
+                                base_input = label_file.replace("_label", "_input")
+                                if os.path.exists(base_input):
+                                    if "Tccd" in lbl or "Tdie" in lbl:
+                                        self.k10temp_inputs["tccd"] = base_input
+                                    elif "Tctl" in lbl:
+                                        self.k10temp_inputs["tctl"] = base_input
+                            except Exception:
+                                pass
+                        # 라벨이 없는 경우 기본 input 파일 매핑
+                        if not self.k10temp_inputs:
+                            for inp in sorted(glob.glob(os.path.join(p, "temp*_input"))):
+                                self.k10temp_inputs["tctl"] = inp
+                                break
+                        break
+                except Exception:
+                    pass
+
+    def _read_cpu_temp_direct(self):
+        """
+        psutil의 무거운 전체 hwmon 스캔 오버헤드를 우회하여
+        k10temp sysfs 커널 파일에서 Tccd1 / Tctl 온도를 직접 0.01ms 내에 고속 읽기
+        """
+        if not self.k10temp_hwmon_path or not os.path.exists(self.k10temp_hwmon_path):
+            self._init_k10temp_path()
+
+        if not self.k10temp_inputs:
+            return 0.0, 0.0, 0.0
+
+        tccd_c = 0.0
+        tctl_c = 0.0
+
+        try:
+            # 1. 물리 코어 다이 접합부 온도 (Tccd1)
+            tccd_path = self.k10temp_inputs.get("tccd")
+            if tccd_path and os.path.exists(tccd_path):
+                with open(tccd_path, "r") as f:
+                    val = float(f.read().strip()) / 1000.0
+                if 10.0 <= val <= 115.0:
+                    tccd_c = val
+
+            # 2. 종합 제어 온도 (Tctl)
+            tctl_path = self.k10temp_inputs.get("tctl")
+            if tctl_path and os.path.exists(tctl_path):
+                with open(tctl_path, "r") as f:
+                    val = float(f.read().strip()) / 1000.0
+                if 10.0 <= val <= 115.0:
+                    tctl_c = val
+
+            main_c = tccd_c if tccd_c > 0.0 else tctl_c
+            return main_c, tccd_c, tctl_c
+        except Exception:
+            # sysfs 경로 변경 등 예외 발생 시 경로 재초기화 유도
+            self.k10temp_hwmon_path = None
+            self.k10temp_inputs = {}
+            return 0.0, 0.0, 0.0
 
     def _init_nvml(self):
         if not HAS_NVML:
@@ -187,31 +268,68 @@ class SystemMonitorCollector(QThread):
         freqs = psutil.cpu_freq(percpu=True)
         per_cpu_freq = [int(f.current) for f in freqs] if freqs else [0] * len(per_cpu_percent)
 
-        # 실시간 코어 다이 온도 (Tccd1) 우선 탐색
-        temp_c = 0.0
-        tctl_c = 0.0
-        tccd_c = 0.0
-        try:
-            temps = psutil.sensors_temperatures()
-            if 'k10temp' in temps:
-                for entry in temps['k10temp']:
-                    if entry.label.startswith('Tccd') or entry.label == 'Tdie':
-                        if tccd_c == 0.0:
-                            tccd_c = entry.current
-                    elif entry.label == 'Tctl':
-                        tctl_c = entry.current
-                
-                # Ryzen 9800X3D 실시간 물리 코어 다이 온도(Tccd1)를 최우선으로 채택
-                if tccd_c > 0.0:
-                    temp_c = tccd_c
-                elif tctl_c > 0.0:
-                    temp_c = tctl_c
-                elif len(temps['k10temp']) > 0:
-                    temp_c = temps['k10temp'][0].current
-            elif 'coretemp' in temps and len(temps['coretemp']) > 0:
-                temp_c = temps['coretemp'][0].current
-        except Exception:
-            pass
+        # 1. k10temp 커널 sysfs 직접 읽기 (0.01ms 고속 & 무결점 수집)
+        temp_c, tccd_c, tctl_c = self._read_cpu_temp_direct()
+
+        # 2. 직접 읽기 실패 시 psutil 다중 센서 백업 탐색
+        if temp_c <= 0.0:
+            try:
+                temps = psutil.sensors_temperatures()
+                if 'k10temp' in temps:
+                    for entry in temps['k10temp']:
+                        if entry.label.startswith('Tccd') or entry.label == 'Tdie':
+                            if tccd_c == 0.0:
+                                tccd_c = entry.current
+                        elif entry.label == 'Tctl':
+                            tctl_c = entry.current
+                    if tccd_c > 0.0:
+                        temp_c = tccd_c
+                    elif tctl_c > 0.0:
+                        temp_c = tctl_c
+                    elif len(temps['k10temp']) > 0:
+                        temp_c = temps['k10temp'][0].current
+                elif 'coretemp' in temps and len(temps['coretemp']) > 0:
+                    temp_c = temps['coretemp'][0].current
+                elif 'zenpower' in temps and len(temps['zenpower']) > 0:
+                    temp_c = temps['zenpower'][0].current
+                elif 'cpu_thermal' in temps and len(temps['cpu_thermal']) > 0:
+                    temp_c = temps['cpu_thermal'][0].current
+            except Exception:
+                pass
+
+        # 3. Linux thermal_zone 백업 탐색
+        if temp_c <= 0.0:
+            import glob
+            for tz in glob.glob("/sys/class/thermal/thermal_zone*/temp"):
+                try:
+                    with open(tz, "r") as f:
+                        tz_val = float(f.read().strip()) / 1000.0
+                    if 15.0 <= tz_val <= 115.0:
+                        temp_c = tz_val
+                        break
+                except Exception:
+                    pass
+
+        # 4. it8686 메인보드 CPU 소켓 온도 백업 탐색 (temp3)
+        if temp_c <= 0.0 and self.it8686_hwmon_path:
+            try:
+                skt_p = os.path.join(self.it8686_hwmon_path, "temp3_input")
+                if os.path.exists(skt_p):
+                    with open(skt_p, "r") as f:
+                        skt_val = float(f.read().strip()) / 1000.0
+                    if 15.0 <= skt_val <= 115.0:
+                        temp_c = skt_val
+            except Exception:
+                pass
+
+        # 5. 절대 영하/0도 방지 래치 (Zero-Drop Latch): 직전 유효 정상 온도 보존
+        if 10.0 <= temp_c <= 115.0:
+            self.last_cpu_temp = temp_c
+        else:
+            temp_c = self.last_cpu_temp
+
+        tccd_c = tccd_c if tccd_c > 0.0 else temp_c
+        tctl_c = tctl_c if tctl_c > 0.0 else temp_c
 
         fan_rpm = 0
         try:

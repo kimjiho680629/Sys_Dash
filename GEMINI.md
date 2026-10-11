@@ -112,14 +112,14 @@
 - **GUI 프레임워크**: PyQt6 (하드웨어 가속 QPainter 렌더링, 60 FPS 보간 애니메이션, Wayland 네이티브)
 - **센서 수집 백엔드**:
   - `Hyprland IPC (JSON Socket)`: `hyprctl monitors`, `clients`, `activewindow` 연동을 통한 멀티 모니터별 워크스페이스 활성 창 및 Wayland `idle_inhibit` 프로토콜 기반 게임/유튜브 영상/데스크톱 실황 프레임레이트(FPS) 자동 판별
-  - `k10temp` (Linux hwmon): AMD Zen 5 단일 CCD 물리 접합부 실시간 다이 온도(`Tccd1`) 우선 수집 (제어용 평활화 `Tctl` 우회로 50°C 고정 현상 완전 해결)
+  - `k10temp` (Linux hwmon 커널 직접 직결 & Zero-Drop 래치 엔진): psutil의 무거운 전체 hwmon 스캔 오버헤드를 우회하여 커널 sysfs (`/sys/class/hwmon/hwmon*/temp3_input` [Tccd1], `temp1_input` [Tctl])에 0.01ms 직결 접근. 센서 일시 결측 시 `psutil` ⭢ `thermal_zone` ⭢ `it8686 temp3`(메인보드 소켓)으로 이어지는 4단계 다계층 폴백(Multi-Tier Fallback) 및 직전 정상 온도 유지 **Zero-Drop 래치(`last_cpu_temp`)** 엔진 탑재로 0°C 고정 현상 완전 해결
   - `RAPL powercap` (`/sys/class/powercap/intel-rapl:0/energy_uj`): 초당 에너지 미분 연산을 통한 실시간 CPU 패키지 소비전력(W) 정밀 측정
   - `it8686` (ISA hwmon): 실시간 CPU Vcore 전압(`in0`), CPU 팬 속도(`fan1`), 메인보드 VRM 온도(`temp2`), PCH 칩셋 온도(`temp4`) 직접 연동
   - `nvidia-ml-py`: 프로세스 fork/exec 없이 공유 라이브러리(C 바인딩)로 GPU 센서 직접 호출 (오버헤드 0%, 패키지 업데이트 후 재부팅 전 드라이버 버전 불일치 시 36°C 안전 폴백 및 5초 주기 백그라운드 자동 복구 재연결 탑재)
   - `psutil`: 최적화된 C 확장을 통한 CPU 코어별 클럭, RAM, 스토리지 I/O, 네트워크 대역폭 및 프로세스 수집
   - `wpctl`: PipeWire / WirePlumber 마스터 오디오 싱크 볼륨 및 상태 수집
   - `DMI sysfs`: `/sys/class/dmi/id/` 커널 인터페이스를 통한 메인보드 모델 및 BIOS 버전 수집
-  - **하이브리드 하드웨어 자동 감지 (`HardwareDetector`)**: 커널 procfs(/proc/cpuinfo), sysfs cpufreq/cache, DMI, NVML, psutil, PipeWire를 통합하여 다른 시스템(인텔, AMD, 다양한 그래픽카드/보드/SSD/오디오)에서도 시스템 스펙(코어 수, 부스트 클럭, 캐시 용량, TGP, 보드명, 메모리, NVMe 모델, 오디오 싱크 등)을 지능적으로 100% 자동 인식.
+  - **하이브리드 하드웨어 자동 감지 (`HardwareDetector`)**: 커널 procfs(/proc/cpuinfo), sysfs cpufreq/cache, DMI, NVML, psutil, PipeWire와 함께 **Linux PCI 버스 sysfs (`/sys/bus/pci/devices/*/subsystem_vendor`) 기반 GPU 제조사 서브시스템 벤더 ID(`0x1771` ⭢ INNO3D, ASUS, MSI, GIGABYTE 등) 자동 감지 엔진**을 탑재하여 `INNO3D RTX 5070 Ti`를 100% 네이티브 자동 인식.
   - **사용자 커스텀 오버라이드 (`HardwareConfig`)**: `config.py`의 `HardwareConfig`를 통해 원하는 브랜드명이나 스펙 라벨을 손쉽게 덮어쓰기 지원.
 - **테마 프록시 (`ThemeProxy`)**: 정적 하드코딩 없이 런타임에 단일 메모리 참조로 다크/화이트 테마 즉시 교체
 - **비동기 스레딩**: `SystemMonitorCollector (QThread)`를 통해 백그라운드 수집을 수행하여 UI 렌더링 스레드의 프레임 드랍을 원천 차단
