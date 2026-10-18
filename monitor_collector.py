@@ -69,6 +69,15 @@ class SystemMonitorCollector(QThread):
         self.hw_router = HardwareDetector.get_router_info()
         self.cached_net_iface = self._init_network_iface()
 
+        # 상위 프로세스(TOP 7) 안정적 수집을 위한 개별 PID CPU 틱 캐시 및 Zero-Drop 래치
+        self._proc_cpu_ticks = {}
+        self._last_proc_sample_time = time.time()
+        self._clk_tck = os.sysconf(os.sysconf_names.get('SC_CLK_TCK', 'SC_CLK_TCK')) if hasattr(os, 'sysconf') else 100
+        self._page_size = os.sysconf('SC_PAGE_SIZE') if hasattr(os, 'sysconf') else 4096
+        self._total_ram_bytes = psutil.virtual_memory().total
+        self.last_top_processes = []
+        self._collect_top_processes()
+
     def _init_rapl(self):
         for candidate in ["/sys/class/powercap/intel-rapl:0/energy_uj",
                           "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj"]:
@@ -706,24 +715,137 @@ class SystemMonitorCollector(QThread):
         }
 
     def _collect_top_processes(self):
-        proc_list = []
+        """
+        psutil.process_iter()의 전역 캐시(_pmap) 오염 및 단명 프로세스 경합 예외로 인한
+        전체 목록 소실(빈 배열 반환) 문제를 원천 차단하기 위해,
+        커널 /proc/[pid]/stat & statm 직접 고속 파싱 + 개별 PID 예외 격리 + Zero-Drop 래치 적용.
+        CPU 점유율 높은 순(내림차순, 동률 시 MEM% 순)으로 상위 7개(TOP 7) 프로세스 반환.
+        """
+        now = time.time()
+        dt = max(0.05, now - getattr(self, '_last_proc_sample_time', now - 0.8))
+        self._last_proc_sample_time = now
+
+        clk_tck = getattr(self, '_clk_tck', 100) or 100
+        page_size = getattr(self, '_page_size', 4096) or 4096
+        total_ram = getattr(self, '_total_ram_bytes', 0) or psutil.virtual_memory().total
+        prev_ticks_map = getattr(self, '_proc_cpu_ticks', {})
+        new_ticks_map = {}
+
+        candidates = []
+
         try:
-            for p in sorted(psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']),
-                            key=lambda x: x.info.get('cpu_percent') or 0,
-                            reverse=True)[:5]:
-                info = p.info
-                name = info['name'] or 'unknown'
+            proc_entries = os.listdir('/proc')
+        except Exception:
+            proc_entries = []
+
+        for entry in proc_entries:
+            if not entry.isdigit():
+                continue
+            pid = int(entry)
+            try:
+                # 1. /proc/[pid]/stat 읽기 (이름 및 CPU utime+stime 추출)
+                with open(f"/proc/{entry}/stat", "rb") as f:
+                    stat_bytes = f.read()
+                if not stat_bytes:
+                    continue
+
+                lpar = stat_bytes.find(b'(')
+                rpar = stat_bytes.rfind(b')')
+                if lpar == -1 or rpar == -1 or rpar <= lpar:
+                    continue
+
+                name = stat_bytes[lpar + 1:rpar].decode('utf-8', errors='replace').strip() or 'unknown'
+                fields = stat_bytes[rpar + 2:].split()
+                if len(fields) < 13:
+                    continue
+
+                # 커널 스레드(이름이 kworker, ksoftirqd, migration 등이고 가상 메모리가 없는 경우) 제외를 위해 statm 확인
+                rss_pages = 0
+                vms_pages = 0
+                try:
+                    with open(f"/proc/{entry}/statm", "rb") as mf:
+                        mparts = mf.read().split()
+                        if len(mparts) >= 2:
+                            vms_pages = int(mparts[0])
+                            rss_pages = int(mparts[1])
+                except Exception:
+                    pass
+
+                # 순수 커널 스레드(가상 메모리 0)는 사용자 활성 태스크 HUD에서 제외
+                if vms_pages == 0 and rss_pages == 0:
+                    continue
+
+                utime = int(fields[11])
+                stime = int(fields[12])
+                total_ticks = utime + stime
+                new_ticks_map[pid] = total_ticks
+
+                prev_ticks = prev_ticks_map.get(pid)
+                if prev_ticks is not None and total_ticks >= prev_ticks:
+                    delta_ticks = total_ticks - prev_ticks
+                    cpu_pct = ((delta_ticks / float(clk_tck)) / dt) * 100.0
+                else:
+                    cpu_pct = 0.0
+
+                mem_pct = ((rss_pages * page_size) / float(total_ram)) * 100.0 if total_ram > 0 else 0.0
+
                 if len(name) > 15:
                     name = name[:14] + "…"
-                proc_list.append({
-                    "pid": info['pid'],
+
+                candidates.append({
+                    "pid": pid,
                     "name": name,
-                    "cpu_percent": info['cpu_percent'] or 0.0,
-                    "mem_percent": info['memory_percent'] or 0.0
+                    "cpu_percent": round(max(0.0, cpu_pct), 1),
+                    "mem_percent": round(max(0.0, mem_pct), 1),
+                    "_raw_ticks": total_ticks
                 })
-        except Exception:
-            pass
-        return proc_list
+            except Exception:
+                # 개별 프로세스가 종료되거나 권한이 없어도 다른 프로세스 수집에 전혀 영향을 주지 않음
+                continue
+
+        self._proc_cpu_ticks = new_ticks_map
+
+        # 만약 /proc 직접 스캔 결과가 비어있을 경우 개별 예외 격리된 psutil 백업 수행
+        if not candidates:
+            for p in psutil.process_iter():
+                try:
+                    with p.oneshot():
+                        pid = p.pid
+                        name = p.name() or 'unknown'
+                        if len(name) > 15:
+                            name = name[:14] + "…"
+                        cpu_pct = p.cpu_percent() or 0.0
+                        mem_pct = p.memory_percent() or 0.0
+                        candidates.append({
+                            "pid": pid,
+                            "name": name,
+                            "cpu_percent": round(float(cpu_pct), 1),
+                            "mem_percent": round(float(mem_pct), 1),
+                            "_raw_ticks": 0
+                        })
+                except Exception:
+                    continue
+
+        if candidates:
+            # CPU 점유율 높은 순(1순위: cpu_percent 내림차순, 2순위: mem_percent 내림차순, 3순위: 누적 틱)으로 상위 7개 추출
+            candidates.sort(
+                key=lambda x: (x["cpu_percent"], x["mem_percent"], x.get("_raw_ticks", 0)),
+                reverse=True
+            )
+            top_7 = [
+                {
+                    "pid": item["pid"],
+                    "name": item["name"],
+                    "cpu_percent": item["cpu_percent"],
+                    "mem_percent": item["mem_percent"]
+                }
+                for item in candidates[:7]
+            ]
+            self.last_top_processes = top_7
+            return top_7
+
+        # Zero-Drop 래치: 일시적 수집 결측 시에도 직전 유효 TOP 7 목록 유지
+        return getattr(self, 'last_top_processes', [])
 
     def _collect_system_meta(self):
         uptime_sec = time.time() - psutil.boot_time()

@@ -33,8 +33,8 @@
 │    (mobo_photo.png + B850I)     │    (ssd_photo.png 사진 전용)    │    (net_photo.png + GT-AX11000) │
 │    - PCIe 버스 링크 펄스 애니    │    - C: 점유율 + I/O 오실로스코프 │    - 다운/업로드 듀얼 스코프    │
 │    - 3대 서멀 배지 (수온/VRM/PCH) │ 4. PipeWire 사운드 패널         │ 3. 프로세스 센티넬 패널         │
-│                                 │    (audio_photo.png + Master)   │    - TOP 5 활성 프로세스 테이블 │
-│                                 │    - 대형 VOL 수치 + 볼륨 바    │                                 │
+│                                 │    (audio_photo.png + Master)   │    - TOP 7 활성 프로세스 테이블 │
+│                                 │    - 대형 VOL 수치 + 볼륨 바    │      (CPU 점유율 내림차순)      │
 │                                 │    - 8밴드 점핑 VU 이퀄라이저   │                                 │
 └─────────────────────────────────┴─────────────────────────────────┴─────────────────────────────────┘
 ```
@@ -101,7 +101,9 @@
      - 실시간 대역폭 수치 (`▼ 1.2 MB/s   ▲ 0.3 MB/s`) + TX/RX 패킷 스트림 점멸 애니메이션.
      - **실시간 다운로드 & 업로드 듀얼 미니 오실로스코프 그래프**.
    - **패널 3: 상위 프로세스 독립 패널 (`proc_frame`)**:
-     - `TOP 5 RESOURCE SENTINEL (ACTIVE TASKS)` 프로세스 점유율 HUD 테이블.
+     - `TOP 7 RESOURCE SENTINEL (ACTIVE TASKS)` 프로세스 점유율 HUD 테이블.
+     - **CPU 점유율 높은 순(내림차순, 동률 시 메모리 점유율 순)으로 상위 7개 프로세스 실시간 랭킹 표기**.
+     - 위젯 높이에 맞춘 동적 행 높이(`row_h`) 스케일링 엔진을 적용하여 어떤 해상도/배율에서도 7개 행 전체 무결점 렌더링.
 
 ---
 
@@ -113,6 +115,7 @@
 - **센서 수집 백엔드**:
   - `Hyprland IPC (JSON Socket)`: `hyprctl monitors`, `clients`, `activewindow` 연동을 통한 멀티 모니터별 워크스페이스 활성 창 및 Wayland `idle_inhibit` 프로토콜 기반 게임/유튜브 영상/데스크톱 실황 프레임레이트(FPS) 자동 판별
   - `k10temp` (Linux hwmon 커널 직접 직결 & Zero-Drop 래치 엔진): psutil의 무거운 전체 hwmon 스캔 오버헤드를 우회하여 커널 sysfs (`/sys/class/hwmon/hwmon*/temp3_input` [Tccd1], `temp1_input` [Tctl])에 0.01ms 직결 접근. 센서 일시 결측 시 `psutil` ⭢ `thermal_zone` ⭢ `it8686 temp3`(메인보드 소켓)으로 이어지는 4단계 다계층 폴백(Multi-Tier Fallback) 및 직전 정상 온도 유지 **Zero-Drop 래치(`last_cpu_temp`)** 엔진 탑재로 0°C 고정 현상 완전 해결
+  - `커널 /proc 직접 델타 수집 & Zero-Drop 프로세스 센티넬`: `psutil.process_iter()`의 전역 캐시(`_pmap`) 오염 및 단명 프로세스 소멸 경합 시 발생하는 예외로 인한 전체 목록 백지화(빈 배열 반환) 버그를 원천 해결하기 위해, 커널 `/proc/[pid]/stat` 및 `statm` 직접 고속 파싱 + **개별 PID 예외 격리(Fault-Isolation) 엔진** 탑재. 폴링 주기별 프로세스 CPU 틱(Jiffies) 미분 델타를 계산하여 CPU 점유율 높은 순으로 정렬하며, 일시적 결측 시 직전 유효 목록을 유지하는 **Zero-Drop 래치(`last_top_processes`)**를 통해 무중단 상위 7개 프로세스 표기 보장
   - `RAPL powercap` (`/sys/class/powercap/intel-rapl:0/energy_uj`): 초당 에너지 미분 연산을 통한 실시간 CPU 패키지 소비전력(W) 정밀 측정
   - `it8686` (ISA hwmon): 실시간 CPU Vcore 전압(`in0`), CPU 팬 속도(`fan1`), 메인보드 VRM 온도(`temp2`), PCH 칩셋 온도(`temp4`) 직접 연동
   - `nvidia-ml-py`: 프로세스 fork/exec 없이 공유 라이브러리(C 바인딩)로 GPU 센서 직접 호출 (오버헤드 0%, 패키지 업데이트 후 재부팅 전 드라이버 버전 불일치 시 36°C 안전 폴백 및 5초 주기 백그라운드 자동 복구 재연결 탑재)
@@ -159,7 +162,7 @@
 │   ├── mini_scope.py           # 0~100 눈금 미니 오실로스코프 파형 그래프 (다크 네온 채움 지원)
 │   ├── pcb_bar.py              # 부드러운 스프링 보간(Lerp) 프로그레스 바
 │   ├── pcb_panels.py           # 패널 프레임 및 사선 챔퍼 시계 바
-│   └── process_table.py        # 화이트/다크 스타일 TOP 5 프로세스 테이블
+│   └── process_table.py        # 화이트/다크 스타일 TOP 7 프로세스 테이블 (CPU% 내림차순, 동적 스케일링)
 ├── requirements.txt            # [신규] 필수 파이썬 패키지 목록
 ├── run_dashboard.sh            # 단일 바이너리 우선 실행 래퍼 스크립트
 ├── sys-dash.desktop            # 데스크톱 애플리케이션 런처 등록 파일

@@ -2,7 +2,7 @@
 화이트 & 다크 PCB AIDA64 센서 패널 - GPU & 네트워크 & 프로세스 섹션 (독립 분리 패널)
 - 패널 1: GeForce RTX 5070 Ti 독립 프레임
 - 패널 2: Network Sentinel (Wi-Fi 6E) 독립 프레임 (실물 사진 + 듀얼 오실로스코프 + 패킷 스트림)
-- 패널 3: TOP 5 RESOURCE SENTINEL 프로세스 독립 프레임
+- 패널 3: TOP 7 RESOURCE SENTINEL 프로세스 독립 프레임 (CPU 점유율 내림차순)
 """
 
 import os
@@ -265,9 +265,9 @@ class PcbGpuSection(QWidget):
         graphs_h = QHBoxLayout()
         graphs_h.setSpacing(8)
         self.utl_scope = MiniScopeGraph(max_points=32, show_labels=True, parent=self.gpu_frame)
-        self.utl_scope.setFixedHeight(84)
+        self.utl_scope.setFixedHeight(70)
         self.fps_scope = MiniScopeGraph(max_points=32, show_labels=True, parent=self.gpu_frame)
-        self.fps_scope.setFixedHeight(84)
+        self.fps_scope.setFixedHeight(70)
         graphs_h.addWidget(self.utl_scope)
         graphs_h.addWidget(self.fps_scope)
         gpu_layout.addLayout(graphs_h)
@@ -295,7 +295,7 @@ class PcbGpuSection(QWidget):
         self.volt_tag, self.volt_val, self.volt_bar = add_meter_row("Core Voltage", "0.850 V", 1.20)
         self.pwr_tag, self.pwr_val, self.pwr_bar = add_meter_row("Package Power (TGP)", "38.10 W | 13%", hw_gpu["tgp_w"])
 
-        main_layout.addWidget(self.gpu_frame, stretch=6)
+        main_layout.addWidget(self.gpu_frame, stretch=5)
 
         # ==========================================
         # 2. 네트워크 센티넬 전용 독립 패널 (네모칸 2)
@@ -303,8 +303,8 @@ class PcbGpuSection(QWidget):
         self.net_frame = QFrame(self)
         self.net_frame.setObjectName("net_frame")
         net_layout = QVBoxLayout(self.net_frame)
-        net_layout.setContentsMargins(16, 10, 16, 10)
-        net_layout.setSpacing(6)
+        net_layout.setContentsMargins(16, 8, 16, 8)
+        net_layout.setSpacing(5)
 
         # 네트워크 헤더 (실물 사진 에셋 + 타이틀 + 대역폭 수치)
         net_title_h = QHBoxLayout()
@@ -341,11 +341,11 @@ class PcbGpuSection(QWidget):
         net_scopes_h.setSpacing(8)
 
         self.down_scope = MiniScopeGraph(max_points=28, show_labels=False, parent=self.net_frame)
-        self.down_scope.setFixedHeight(46)
+        self.down_scope.setFixedHeight(42)
         net_scopes_h.addWidget(self.down_scope)
 
         self.up_scope = MiniScopeGraph(max_points=28, show_labels=False, parent=self.net_frame)
-        self.up_scope.setFixedHeight(46)
+        self.up_scope.setFixedHeight(42)
         net_scopes_h.addWidget(self.up_scope)
 
         net_layout.addLayout(net_scopes_h)
@@ -360,15 +360,14 @@ class PcbGpuSection(QWidget):
         proc_layout.setContentsMargins(16, 8, 16, 8)
         proc_layout.setSpacing(4)
 
-        self.proc_title = QLabel("TOP 5 RESOURCE SENTINEL (ACTIVE TASKS)")
+        self.proc_title = QLabel("TOP 7 RESOURCE SENTINEL (ACTIVE TASKS)")
         self.proc_title.setFont(get_font_bold(10))
         proc_layout.addWidget(self.proc_title)
 
         self.proc_table = TopProcessTable(parent=self.proc_frame)
-        self.proc_table.setFixedHeight(116)
-        proc_layout.addWidget(self.proc_table)
+        proc_layout.addWidget(self.proc_table, stretch=1)
 
-        main_layout.addWidget(self.proc_frame, stretch=3)
+        main_layout.addWidget(self.proc_frame, stretch=4)
 
         self.apply_theme()
 
